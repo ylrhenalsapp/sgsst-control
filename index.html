@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control SG-SST | Gestión de Horas y Evidencias</title>
+
+<link rel="stylesheet" href="assets/css/app.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/6.1.11/index.global.min.css">
+
+</head>
+<body>
+
+<div id="loginOverlay" class="loginOverlay">
+  <div class="loginCard">
+    <div class="loginBrand">
+      <img src="assets/img/logo-sst.png" alt="SG-SST Control">
+    </div>
+    <h1>Bienvenida al control SG-SST</h1>
+    <p>Ingresa tu correo y tu contraseña para acceder a la gestión de actividades, horas, evidencias e informes.</p>
+    <label>Correo</label>
+    <input id="loginEmail" type="email" autocomplete="username" placeholder="tu@correo.com">
+    <label style="margin-top:10px;display:block">Contraseña</label>
+    <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Tu contraseña" onkeydown="if(event.key==='Enter')login()">
+    <button class="primary" style="width:100%;margin-top:14px" onclick="login()">Ingresar</button>
+    <div id="loginError" class="loginError">Correo o contraseña incorrectos.</div>
+    <div class="loginHint">Acceso personalizado para el equipo responsable del proyecto SG-SST.</div>
+  </div>
+</div>
+<div id="userTop" class="userTop" style="display:none">
+  <div style="display:flex;align-items:center;gap:10px">
+    <button class="mobileMenuBtn" onclick="toggleMobileMenu()">☰</button>
+    <div class="userIdentity">
+      <div class="userAvatar">YL</div>
+      <div style="min-width:0">
+        <div class="userName">Ingresó: Yasbleidis López Rhenals</div>
+        <div class="userRole">Fisioterapeuta · Especialista en Gerencia de la Seguridad y Salud en el Trabajo</div>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="userLoginBadge">✓ Sesión activa</div>
+    <button class="secondary" onclick="logout()">Cerrar sesión</button>
+  </div>
+</div>
+
+<div id="visualStatusStrip" style="display:none;padding:10px 18px;background:linear-gradient(90deg,#18324a,#285878);color:#fff">
+  <div style="max-width:1600px;margin:auto;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+    <div style="font-weight:800">📊 Control inteligente de actividades, horas y evidencias</div>
+    <div style="font-size:13px;opacity:.9">Gestión operativa SG-SST en tiempo real</div>
+  </div>
+</div>
+
+<div id="sidebarBackdrop" class="sidebarBackdrop" style="display:none" onclick="toggleMobileMenu(false)"></div>
+
+<div class="app">
+<aside class="sidebar">
+  <div class="brand">SG-SST CONTROL<small>Horas · Actividades · Evidencias · Informes</small></div>
+  <nav class="nav">
+    <a href="#dashboard" class="active" onclick="showSection('dashboard',this)">📊 Dashboard</a>
+    <a href="#actividades" onclick="showSection('actividades',this)">📋 Actividades</a>
+    <a href="#horas" onclick="showSection('horas',this)">⏱️ Registro de horas</a>
+    <a href="#evidencias" onclick="showSection('evidencias',this)">📎 Evidencias y links</a>
+    <a href="#calendario" onclick="showSection('calendario',this);renderCalendar()">🗓️ Calendario</a>
+    <a href="#informes" onclick="showSection('informes',this)">📄 Informes</a>
+    <a href="#configuracion" onclick="showSection('configuracion',this)">⚙️ Configuración</a>
+  </nav>
+</aside>
+
+<main class="content">
+<div class="top">
+  <div><h1 id="pageTitle">Dashboard</h1><p>Control operativo del proyecto y seguimiento por empresa, sede y periodo.</p></div>
+  <div class="filters">
+    <select id="filterCompany" onchange="refreshAll()"></select>
+    <select id="filterSite" onchange="refreshAll()"></select>
+    <input id="filterMonth" type="month" onchange="refreshAll()">
+  </div>
+</div>
+
+<div id="bagAlertBanner" class="conflictBox conflictBad" style="display:none;margin-bottom:16px"></div>
+
+<section id="dashboard" class="section active">
+<div class="grid4">
+  <div class="card metric"><div class="label">Horas asignadas</div><div class="value" id="mAssigned">0</div><div class="sub">Bolsa de horas de la sede</div></div>
+  <div class="card metric"><div class="label">Horas ejecutadas</div><div class="value" id="mUsed">0</div><div class="sub">Según registros del periodo</div></div>
+  <div class="card metric"><div class="label">Horas disponibles</div><div class="value" id="mRemaining">0</div><div class="sub">Saldo de la bolsa</div></div>
+  <div class="card metric"><div class="label">Valor ejecutado</div><div class="value" id="mValue">$0</div><div class="sub">Tarifa vigente por hora</div></div>
+</div>
+<div class="grid2" style="margin-top:18px">
+ <div class="panel"><div class="panelhead"><h2>Las 5 actividades del proyecto</h2><button class="primary" data-requires-write onclick="openActivityModal()">+ Registrar avance</button></div><div id="dashboardActivities"></div></div>
+ <div>
+  <div class="panel"><div class="panelhead"><h2>Acciones rápidas</h2></div>
+    <p><button class="primary" data-requires-write onclick="openHoursModal()">⏱️ Registrar horas</button></p>
+    <p><button class="secondary" data-requires-write onclick="openEvidenceModal()">📎 Cargar evidencia o link</button></p>
+    <p><button class="primary" data-requires-write onclick="openScheduleModal()">🗓️ Programar actividad</button></p>
+    <p><button class="success" onclick="showSection('informes',document.querySelector('.nav a[href=&quot;#informes&quot;]'));generateReport()">📄 Generar informe</button></p>
+  </div>
+  <div class="panel"><div class="panelhead"><h2>Últimos registros</h2></div><div id="recentRecords"></div></div>
+ </div>
+</div>
+</section>
+
+<section id="actividades" class="section">
+<div class="panel"><div class="panelhead"><h2>Gestión de actividades</h2><button class="primary" data-requires-write onclick="openActivityModal()">+ Nuevo avance</button></div><div id="activitiesList"></div></div>
+</section>
+
+<section id="horas" class="section">
+<div class="panel"><div class="panelhead"><h2>Registro de horas</h2><button class="primary" data-requires-write onclick="openHoursModal()">+ Registrar horas</button></div><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Empresa / Sede</th><th>Actividad</th><th>Estado</th><th>Horas</th><th>Tarifa</th><th>Valor</th><th>Acción</th></tr></thead><tbody id="hoursTable"></tbody></table></div></div>
+</section>
+
+<section id="evidencias" class="section">
+<div class="panel"><div class="panelhead"><h2>Evidencias y enlaces</h2><button class="primary" data-requires-write onclick="openEvidenceModal()">+ Cargar evidencia</button></div><p class="small">Puedes adjuntar un archivo real (se guarda en Supabase Storage) o registrar un enlace de Google Drive, OneDrive, SharePoint u otra ubicación.</p><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Actividad</th><th>Descripción</th><th>Archivo / Link</th><th>Acción</th></tr></thead><tbody id="evidenceTable"></tbody></table></div></div>
+</section>
+
+
+<section id="calendario" class="section">
+  <div class="calendarHero">
+    <h2>Agenda de Yasbleidis</h2>
+    <p>Programa las actividades por empresa y sede, valida tu disponibilidad interna y genera el evento para Google Calendar.</p>
+    <div class="calendarToolbar">
+      <div><label style="color:#fff">Fecha a consultar</label><input id="calendarDate" type="date" onchange="renderCalendar()"></div>
+      <button class="success" data-requires-write onclick="openScheduleModal()">+ Programar actividad</button>
+      <button class="secondary" onclick="renderCalendar()">↻ Actualizar agenda</button>
+    </div>
+  </div>
+  <div class="panel" style="margin-bottom:18px">
+    <div class="panelhead"><h2>Vista de calendario</h2><span class="small">Arrastra un evento para reprogramarlo</span></div>
+    <div id="fullCalendarEl"></div>
+  </div>
+  <div class="calendarGrid">
+    <div class="panel">
+      <div class="panelhead"><h2>Mi disponibilidad</h2></div>
+      <div id="availabilityBox"></div>
+    </div>
+    <div class="panel">
+      <div class="panelhead"><h2>Programación del día</h2><span id="calendarDayCount" class="badge progress">0 sesiones</span></div>
+      <div id="calendarDayList" class="calendarDay"></div>
+    </div>
+  </div>
+</section>
+
+<section id="informes" class="section">
+<div class="panel">
+<div class="panelhead"><h2>Generador de informes</h2><div><button class="success" onclick="generateReport()">↻ Actualizar</button> <button class="secondary" onclick="exportReportPDF()">📕 Exportar PDF</button> <button class="secondary" onclick="exportReportExcel()">📗 Exportar Excel</button> <button class="primary" onclick="prepareEmail()">📩 Preparar correo</button></div></div>
+<div class="formgrid" style="margin-bottom:16px"><div><label>Tipo de informe</label><select id="reportScope" onchange="generateReport()"><option value="monthly">Informe mensual</option><option value="global">Informe global / consolidado</option></select></div><div><label>Periodo de referencia</label><input id="reportMonth" type="month"></div></div>
+<div id="reportBox" class="report">Selecciona empresa, sede y periodo y genera el informe.</div>
+</div>
+</section>
+
+<section id="configuracion" class="section">
+<div class="tabs">
+ <button class="active" onclick="showConfig('companies',this)">Empresas</button>
+ <button onclick="showConfig('sites',this)">Sedes y horas</button>
+ <button onclick="showConfig('rates',this)">Tarifas</button>
+ <button onclick="showConfig('tasks',this)">Actividades</button>
+ <button onclick="showConfig('migration',this)">Migración de datos</button>
+</div>
+<div id="cfg-companies" class="panel"></div><div id="cfg-sites" class="panel" style="display:none"></div><div id="cfg-rates" class="panel" style="display:none"></div><div id="cfg-tasks" class="panel" style="display:none"></div>
+<div id="cfg-migration" class="panel" style="display:none">
+  <div class="panelhead"><h2>Migración de datos del navegador anterior</h2></div>
+  <p class="small">Si esta plataforma reemplaza a la versión anterior (que guardaba todo en este navegador), pulsa el botón para copiar esos datos a la base de datos. Hazlo una sola vez, desde el mismo computador donde usabas la versión anterior.</p>
+  <button class="primary" data-requires-write onclick="runLegacyMigration()">↻ Migrar datos del navegador anterior</button>
+</div>
+</section>
+</main></div>
+
+<div class="modal" id="hoursModal"><div class="modalbox"><h2>Registrar horas</h2>
+<div class="formgrid">
+<div><label>Empresa</label><select id="hCompany" onchange="fillSiteSelect('hCompany','hSite')"></select></div>
+<div><label>Sede</label><select id="hSite"></select></div>
+<div class="full"><label>Actividad</label><select id="hTask"></select></div>
+<div><label>Fecha</label><input id="hDate" type="date"></div><div><label>Horas</label><input id="hHours" type="number" min="0.25" step="0.25" placeholder="Ej: 2.5"></div>
+<div><label>Estado de la actividad</label><select id="hStatus"><option value="En proceso">En proceso</option><option value="Completado">Completado</option></select></div>
+<div><label>Tarifa / hora</label><input id="hRate" type="number" min="0" step="1000"></div>
+<div><label>Valor calculado</label><input id="hTotal" readonly></div>
+<div class="full"><div id="hBagInfo" class="small" style="padding:10px;background:#f4f7fa;border-radius:8px">Bolsa disponible: --</div></div>
+<div class="full"><label>Descripción / resultado</label><textarea id="hNotes" placeholder="¿Qué se realizó?"></textarea></div>
+</div>
+<div class="actions"><button class="secondary" onclick="closeModal('hoursModal')">Cancelar</button><button class="primary" onclick="saveHours()">Guardar registro</button></div></div></div>
+
+<div class="modal" id="activityModal"><div class="modalbox"><h2>Registrar avance de actividad</h2>
+<div class="formgrid">
+<div><label>Empresa</label><select id="aCompany" onchange="fillSiteSelect('aCompany','aSite')"></select></div><div><label>Sede</label><select id="aSite"></select></div>
+<div class="full"><label>Actividad</label><select id="aTask"></select></div>
+<div><label>Estado</label><select id="aStatus"><option value="Completado">Completado</option><option value="En proceso">En proceso</option><option value="Pendiente">Pendiente</option></select></div>
+<div><label>Horas ejecutadas en este avance</label><input id="aHours" type="number" min="0" step="0.25" value="0" placeholder="Ej: 2.5"></div>
+<div class="full"><div id="aBagInfo" class="scheduleInfo">Bolsa disponible: --</div></div><div class="full"><label>Observación</label><textarea id="aNotes"></textarea></div>
+</div><div class="actions"><button class="secondary" onclick="closeModal('activityModal')">Cancelar</button><button class="primary" onclick="saveActivity()">Guardar avance</button></div></div></div>
+
+<div class="modal" id="evidenceModal"><div class="modalbox"><h2>Cargar evidencia o enlace</h2>
+<div class="formgrid">
+<div><label>Empresa</label><select id="eCompany" onchange="fillSiteSelect('eCompany','eSite')"></select></div><div><label>Sede</label><select id="eSite"></select></div>
+<div class="full"><label>Actividad relacionada</label><select id="eTask"></select></div>
+<div><label>Fecha</label><input id="eDate" type="date"></div><div><label>Archivo</label><input id="eFile" type="file"></div>
+<div class="full"><label>Link de evidencia</label><input id="eLink" placeholder="https://drive.google.com/..."></div>
+<div class="full"><label>Descripción</label><textarea id="eDesc" placeholder="Descripción breve de la evidencia"></textarea></div>
+</div><div class="actions"><button class="secondary" onclick="closeModal('evidenceModal')">Cancelar</button><button class="primary" onclick="saveEvidence()">Guardar evidencia</button></div></div></div>
+
+<div class="modal" id="companyModal"><div class="modalbox"><h2>Agregar empresa</h2><input id="newCompany" placeholder="Nombre de la empresa"><div class="actions"><button class="secondary" onclick="closeModal('companyModal')">Cancelar</button><button class="primary" onclick="addCompany()">Guardar</button></div></div></div>
+<div class="modal" id="siteModal"><div class="modalbox"><h2>Agregar sede</h2><div class="formgrid"><div class="full"><label>Empresa</label><select id="sCompany"></select></div><div><label>Nombre de sede</label><input id="newSite"></div><div><label>Horas asignadas</label><input id="newSiteHours" type="number" min="0" value="0"></div></div><div class="actions"><button class="secondary" onclick="closeModal('siteModal')">Cancelar</button><button class="primary" onclick="addSite()">Guardar</button></div></div></div>
+<div class="modal" id="addHoursModal"><div class="modalbox"><h2>Agregar horas adicionales a la bolsa</h2>
+<p class="small">Estas horas quedarán registradas como un adicional independiente de las horas originales asignadas a la sede.</p>
+<div class="formgrid">
+<div class="full"><label>Empresa</label><input id="addCompanyName" readonly></div>
+<div><label>Sede</label><input id="addSiteName" readonly></div>
+<div><label>Horas adicionales</label><input id="addHoursAmount" type="number" min="0.25" step="0.25" placeholder="Ej: 10"></div>
+<div class="full"><label>Motivo / justificación</label><textarea id="addHoursReason" placeholder="Ej: Se requiere continuar la actividad pendiente y se agotó la bolsa inicial."></textarea></div>
+</div>
+<div class="actions"><button class="secondary" onclick="closeModal('addHoursModal')">Cancelar</button><button class="success" onclick="saveAdditionalHours()">+ Agregar horas</button></div>
+</div></div>
+
+<div class="modal" id="scheduleModal"><div class="modalbox">
+<h2>🗓️ Programar actividad</h2>
+<p class="small">Registra la disponibilidad informada por el líder y define la fecha final según la disponibilidad de tu agenda.</p>
+<div class="formgrid">
+  <div><label>Empresa</label><select id="scCompany" onchange="scheduleCompanyChanged()"></select></div>
+  <div><label>Sede</label><select id="scSite"></select></div>
+  <div class="full"><label>Actividad</label><select id="scTask"></select></div>
+  <div><label>Nombre del líder</label><input id="scLeader" placeholder="Ej: Juan Pérez"></div>
+  <div><label>Correo del líder</label><input id="scEmail" type="email" placeholder="correo@empresa.com"></div>
+  <div><label>Disponibilidad informada por el líder</label><input id="scProposedDate" type="date"></div>
+  <div><label>Hora propuesta por el líder</label><input id="scProposedTime" type="time"></div>
+  <div><label>Fecha programada por Yasbleidis</label><input id="scDate" type="date" onchange="checkScheduleAvailability()"></div>
+  <div><label>Hora programada</label><input id="scTime" type="time" onchange="checkScheduleAvailability()"></div>
+  <div><label>Duración estimada (minutos)</label><input id="scDuration" type="number" min="15" step="15" value="60" onchange="checkScheduleAvailability()"></div>
+  <div><label>Recordatorio</label><select id="scReminder"><option value="30">30 minutos antes</option><option value="60">1 hora antes</option><option value="1440">1 día antes</option></select></div>
+  <div class="full"><label>Observación / contexto</label><textarea id="scNotes" placeholder="Ej: Sesión acordada según conversación con el líder de la sede."></textarea></div>
+  <div class="full"><div id="scheduleAvailability" class="scheduleInfo">Selecciona fecha y hora para validar tu agenda.</div></div>
+</div>
+<div class="actions">
+  <button class="secondary" onclick="closeModal('scheduleModal')">Cancelar</button>
+  <button class="secondary" onclick="saveSchedule(false)">Guardar programación</button>
+  <button class="success" onclick="saveSchedule(true)">Guardar + Google Calendar</button>
+</div>
+</div></div>
+
+<div class="modal" id="monthlyBagModal"><div class="modalbox"><h2>Asignar bolsa de horas del mes</h2>
+<p class="small">La asignación mensual se registra normalmente durante los primeros 5 días. El saldo no utilizado del mes anterior se suma automáticamente como saldo a favor.</p>
+<div class="formgrid">
+<div><label>Empresa</label><input id="mbCompanyName" readonly></div>
+<div><label>Sede</label><input id="mbSiteName" readonly></div>
+<div><label>Mes asignado</label><input id="mbMonth" type="month"></div>
+<div><label>Fecha de asignación</label><input id="mbDate" type="date"></div>
+<div><label>Horas nuevas asignadas</label><input id="mbHours" type="number" min="0" step="0.25" placeholder="Ej: 14"></div>
+<div class="full"><label>Observación</label><textarea id="mbReason" placeholder="Ej: Bolsa mensual asignada durante los primeros 5 días."></textarea></div>
+</div>
+<div id="mbInfo" class="small" style="padding:10px;background:#f4f7fa;border-radius:8px;margin-top:10px"></div>
+<div class="actions"><button class="secondary" onclick="closeModal('monthlyBagModal')">Cancelar</button><button class="primary" onclick="saveMonthlyBag()">Guardar asignación</button></div>
+</div></div>
+<div class="toast" id="toast"></div>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.45.4/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/6.1.11/index.global.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- Copia assets/js/config.example.js a assets/js/config.js con tus credenciales antes de usar -->
+<script src="assets/js/config.js"></script>
+<script src="assets/js/supabaseClient.js"></script>
+<script src="assets/js/auth.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/calendarView.js"></script>
+<script src="assets/js/reports.js"></script>
+<script src="assets/js/migrate-localstorage.js"></script>
+</body>
+</html>

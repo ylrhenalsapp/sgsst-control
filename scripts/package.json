@@ -1,0 +1,10 @@
+{
+  "name": "sgsst-control-scripts",
+  "private": true,
+  "type": "module",
+  "description": "Scripts de administración (no forman parte del sitio publicado).",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "dotenv": "^16.4.5"
+  }
+}
