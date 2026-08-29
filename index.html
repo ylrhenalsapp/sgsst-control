@@ -153,7 +153,7 @@
 
 <section id="informes" class="section">
 <div class="panel">
-<div class="panelhead"><h2>Generador de informes</h2><div><button class="success" onclick="generateReport()">↻ Actualizar</button> <button class="secondary" onclick="exportReportPDF()">📕 Exportar PDF</button> <button class="secondary" onclick="exportReportExcel()">📗 Exportar Excel</button> <button class="primary" onclick="prepareEmail()">📩 Preparar correo</button></div></div>
+<div class="panelhead"><h2>Generador de informes</h2><div><button class="success" onclick="generateReport()">↻ Actualizar</button> <button class="secondary" onclick="exportReportPDF()">📕 Exportar PDF</button> <button class="secondary" onclick="exportReportWord()">📘 Exportar Word</button> <button class="primary" onclick="prepareEmail()">📩 Preparar correo</button></div></div>
 <div class="formgrid" style="margin-bottom:16px"><div><label>Tipo de informe</label><select id="reportScope" onchange="generateReport()"><option value="monthly">Informe mensual</option><option value="global">Informe global / consolidado</option></select></div><div><label>Periodo de referencia</label><input id="reportMonth" type="month"></div></div>
 <div id="reportBox" class="report">Selecciona empresa, sede y periodo y genera el informe.</div>
 </div>
@@ -282,9 +282,8 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.52.1/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/6.1.11/index.global.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <!-- Copia assets/js/config.example.js a assets/js/config.js con tus credenciales antes de usar -->
 <script src="assets/js/config.js"></script>
