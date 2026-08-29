@@ -21,7 +21,7 @@
     <input id="loginEmail" type="email" autocomplete="username" placeholder="tu@correo.com">
     <label style="margin-top:10px;display:block">Contraseña</label>
     <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Tu contraseña" onkeydown="if(event.key==='Enter')login()">
-    <button class="primary" style="width:100%;margin-top:14px" onclick="login()">Ingresar</button>
+    <button id="loginBtn" class="primary" style="width:100%;margin-top:14px" onclick="login()">Ingresar</button>
     <div id="loginError" class="loginError">Correo o contraseña incorrectos.</div>
     <div class="loginHint">Acceso personalizado para el equipo responsable del proyecto SG-SST.</div>
   </div>

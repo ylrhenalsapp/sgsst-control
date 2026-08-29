@@ -76,14 +76,28 @@ async function login() {
     $('loginError').style.display = 'block';
     return;
   }
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) {
-    $('loginError').textContent = 'Correo o contraseña incorrectos.';
+  // Feedback inmediato al dar clic: antes el botón se quedaba "quieto" varios
+  // segundos mientras se conectaba con el servidor, y eso hacía parecer que
+  // la plataforma estaba trabada. Ahora se ve de inmediato que está entrando.
+  const btn = $('loginBtn');
+  const btnOriginalText = btn ? btn.textContent : null;
+  if (btn) { btn.disabled = true; btn.textContent = 'Ingresando…'; }
+  $('loginError').style.display = 'none';
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) {
+      $('loginError').textContent = 'Correo o contraseña incorrectos.';
+      $('loginError').style.display = 'block';
+      $('loginPassword').focus();
+      return;
+    }
+    await onLoggedIn(data.session);
+  } catch (e) {
+    $('loginError').textContent = 'No se pudo conectar. Verifica tu conexión a internet e intenta de nuevo.';
     $('loginError').style.display = 'block';
-    $('loginPassword').focus();
-    return;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = btnOriginalText; }
   }
-  await onLoggedIn(data.session);
 }
 
 async function logout() {

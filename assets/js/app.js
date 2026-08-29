@@ -67,11 +67,16 @@ function taskMonthHours(siteId, activityId, m) { return state.hoursSite.filter(h
 // Carga inicial (catálogo) y refresco (datos operativos por filtro)
 // ---------------------------------------------------------------------------
 async function init() {
-  const { data: companies } = await sb.from('companies').select('id,name,sites(id,name)').order('name');
+  // Las 3 consultas de catálogo son independientes entre sí: se piden en
+  // paralelo (antes iban una detrás de otra) para que el primer ingreso a
+  // la plataforma no tarde la suma de las 3, sino solo la más lenta.
+  const [{ data: companies }, { data: activities }, { data: rateRow }] = await Promise.all([
+    sb.from('companies').select('id,name,sites(id,name)').order('name'),
+    sb.from('activities').select('id,name,is_fixed').order('is_fixed', { ascending: false }).order('name'),
+    sb.from('app_settings').select('value').eq('key', 'default_rate').maybeSingle(),
+  ]);
   state.companies = (companies || []).map(c => ({ ...c, sites: c.sites || [] }));
-  const { data: activities } = await sb.from('activities').select('id,name,is_fixed').order('is_fixed', { ascending: false }).order('name');
   state.activities = activities || [];
-  const { data: rateRow } = await sb.from('app_settings').select('value').eq('key', 'default_rate').maybeSingle();
   if (rateRow) state.rate = Number(rateRow.value);
 
   $('filterMonth').value = monthNow();
@@ -94,13 +99,17 @@ async function refreshAll() {
   const s = site();
   if (!s) return;
 
-  const [{ data: hours }, { data: evid }, { data: cal }, { data: statusRows }, { data: bagRow }, { data: targetRows }] = await Promise.all([
+  // Las 7 consultas de esta sección tampoco dependen unas de otras, así que
+  // también van todas en paralelo (se agregó aquí la de "monthly_bags" que
+  // antes se pedía aparte, después de esperar todo lo anterior).
+  const [{ data: hours }, { data: evid }, { data: cal }, { data: statusRows }, { data: bagRow }, { data: targetRows }, { count }] = await Promise.all([
     sb.from('hour_records').select('*').eq('site_id', s.id),
     sb.from('evidences').select('*').eq('site_id', s.id).order('record_date', { ascending: false }),
     sb.from('schedule_events').select('*').eq('site_id', s.id),
     sb.from('v_activity_current_status').select('*').eq('site_id', s.id),
     sb.rpc('get_bag_summary', { p_site_id: s.id, p_month: `${selectedMonth()}-01` }),
     sb.from('activity_targets').select('activity_id,target_hours').eq('site_id', s.id),
+    sb.from('monthly_bags').select('id', { count: 'exact', head: true }).eq('site_id', s.id).eq('month', `${selectedMonth()}-01`),
   ]);
   state.hoursSite = hours || [];
   state.evidencesSite = evid || [];
@@ -110,8 +119,6 @@ async function refreshAll() {
   state.targetsMap = {};
   (targetRows || []).forEach(r => { state.targetsMap[`${s.id}|${r.activity_id}`] = Number(r.target_hours); });
   state.bag = (bagRow && bagRow[0]) || { assigned: 0, additional: 0, carry: 0, total: 0, used: 0, remaining: 0 };
-
-  const { count } = await sb.from('monthly_bags').select('id', { count: 'exact', head: true }).eq('site_id', s.id).eq('month', `${selectedMonth()}-01`);
   state.bagExists = !!count;
 
   renderBagAlert();
