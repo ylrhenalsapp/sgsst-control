@@ -245,10 +245,21 @@ function renderMiniCalendar() {
   // El día de hoy solo se resalta cuando efectivamente se está viendo el mes
   // actual (miniCalOffset === 0); en otro mes no hay "hoy" que resaltar.
   const todayNum = miniCalOffset === 0 ? now.getDate() : -1;
+  // Días de este mes con al menos una actividad programada en la agenda de
+  // la sede seleccionada (state.calendarSite), para marcarlos con un punto.
+  const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const daysWithEvents = new Set(
+    (state.calendarSite || [])
+      .filter(e => e.event_date && e.event_date.startsWith(monthPrefix))
+      .map(e => Number(e.event_date.slice(8, 10)))
+  );
   let cells = '';
   for (let i = 0; i < firstDow; i++) cells += '<span class="miniCalDay empty"></span>';
   for (let d = 1; d <= daysInMonth; d++) {
-    cells += `<span class="miniCalDay${d === todayNum ? ' today' : ''}">${d}</span>`;
+    const cls = ['miniCalDay'];
+    if (d === todayNum) cls.push('today');
+    if (daysWithEvents.has(d)) cls.push('hasEvent');
+    cells += `<span class="${cls.join(' ')}">${d}</span>`;
   }
   el.innerHTML = `
     <div class="miniCalHead">
@@ -313,7 +324,6 @@ function renderDashboard() {
     document.querySelector('#mAssigned').parentElement.querySelector('.sub').textContent = 'Asignadas: 0 h · Saldo anterior: 0 h · Adicionales: 0 h';
     document.querySelector('#mRemaining').parentElement.querySelector('.sub').textContent = `Disponible para ${selectedMonth()}`;
     $('dashboardActivities').innerHTML = '<p class="empty">Todavía no tienes ninguna empresa registrada. Ve a Configuración → Empresas y agrega la primera para empezar.</p>';
-    $('recentRecords').innerHTML = '<div class="empty">Aún no hay registros.</div>';
     updateMonthProgressRadial(0, 0);
     return;
   }
@@ -344,9 +354,6 @@ function renderDashboard() {
       <div style="margin-top:10px">${btn}</div>
     </div>`;
   }).join('') : '<p class="empty">Esta sede todavía no tiene actividades asignadas. Agrégalas desde Configuración → Actividades.</p>';
-
-  const rec = [...filteredHours()].sort((a, b) => b.record_date.localeCompare(a.record_date)).slice(0, 5);
-  $('recentRecords').innerHTML = rec.length ? rec.map(x => `<div style="padding:9px 0;border-bottom:1px solid var(--line)"><b>${x.record_date}</b><div class="small">${taskName(x.activity_id)} · ${x.hours} h · ${x.status}</div></div>`).join('') : '<div class="empty">Aún no hay registros en este periodo.</div>';
 }
 
 function renderActivities() {

@@ -393,9 +393,11 @@ select{accent-color:var(--navy);cursor:pointer}
 .miniCalNav:hover{filter:brightness(.95)}
 .miniCalGrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
 .miniCalGridHead{margin-bottom:4px;font-size:10.5px;font-weight:800;color:var(--muted)}
-.miniCalDay{font-size:12px;padding:6px 0;border-radius:8px;color:var(--text)}
+.miniCalDay{position:relative;font-size:12px;padding:6px 0;border-radius:8px;color:var(--text)}
 .miniCalDay.empty{visibility:hidden}
 .miniCalDay.today{background:var(--navy);color:#fff;font-weight:800}
+.miniCalDay.hasEvent::after{content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--accent)}
+.miniCalDay.today.hasEvent::after{background:#fff}
 
 @media(max-width:900px){
   .sidebarTip{display:none}
