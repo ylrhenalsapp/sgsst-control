@@ -457,3 +457,26 @@ select{accent-color:var(--navy);cursor:pointer}
 @media print{
   .reportTopBar,.reportGrid2{break-inside:avoid}
 }
+
+/* ============================================================================
+   V13: WIZARD (Empresa -> Sede -> Actividades) y banner de cierre de mes
+   ============================================================================ */
+.wizardSteps{display:flex;gap:8px;margin:4px 0 18px;flex-wrap:wrap}
+.wizardStep{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;color:var(--muted);background:var(--soft);border:1px solid var(--line);border-radius:99px;padding:6px 12px}
+.wizardStep.active{color:#fff;background:var(--navy);border-color:var(--navy)}
+.wizardPane label{display:block;margin-bottom:6px;font-size:12.5px;font-weight:700;color:var(--navy)}
+.wizActivitiesList{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:6px 4px;margin:10px 0}
+.wizActivityRow{display:flex;align-items:center;gap:9px;padding:9px 10px;border-bottom:1px solid #f0f3f6;font-size:13px}
+.wizActivityRow:last-child{border-bottom:none}
+.wizActivityRow input[type=checkbox]{width:auto;flex:0 0 auto}
+.wizActivityNew{background:#f4f9f6}
+.wizActivityNew .small{margin-left:2px}
+.linklike{background:none;border:none;color:var(--red);font-size:11.5px;cursor:pointer;margin-left:auto;padding:0;text-decoration:underline;width:auto}
+.wizAddActivity{display:flex;gap:8px}
+.wizAddActivity input{flex:1}
+.wizAddActivity button{width:auto;white-space:nowrap}
+
+.monthCloseBanner{border-radius:12px;padding:13px 15px;font-size:12.5px;line-height:1.55;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.monthCloseBanner button{width:auto;white-space:nowrap;margin-left:auto}
+.monthCloseBanner.openBanner{background:#fff6db;border:1px solid #f0dfa0;color:#7a5c0a}
+.monthCloseBanner.closedBanner{background:#e9f8ef;border:1px solid #bfe6cf;color:#17733c}

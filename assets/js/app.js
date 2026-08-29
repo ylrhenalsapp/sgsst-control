@@ -42,6 +42,8 @@ let state = {
   calendarSite: [],
   statusMap: {},   // `${siteId}|${activityId}` -> 'Pendiente'|'En proceso'|'Completada'
   targetsMap: {},  // `${siteId}|${activityId}` -> target_hours (solo si hay meta configurada)
+  siteActivities: [], // [{site_id, activity_id}] -> qué actividades del catálogo aplican a cada sede
+  closedMonths: new Set(), // `${siteId}|${'YYYY-MM'}` -> mes cerrado (no admite horas nuevas ni edición)
   bag: { assigned: 0, additional: 0, carry: 0, total: 0, used: 0, remaining: 0 },
   bagExists: false,
 };
@@ -58,6 +60,14 @@ function selectedMonth() { return $('filterMonth').value || monthNow(); }
 function taskName(id) { return state.activities.find(t => t.id === id)?.name || 'Actividad'; }
 function safeUrl(u) { return /^https?:\/\//i.test(u || '') ? u : '#'; }
 
+// Actividades del catálogo global que están asignadas a una sede en
+// concreto (antes toda sede veía TODAS las actividades sin distinción).
+function activitiesForSite(siteId) {
+  const ids = new Set(state.siteActivities.filter(sa => sa.site_id === siteId).map(sa => sa.activity_id));
+  return state.activities.filter(a => ids.has(a.id));
+}
+function monthClosed(siteId, month) { return state.closedMonths.has(`${siteId}|${month}`); }
+
 function taskStatus(siteId, activityId) { return state.statusMap[`${siteId}|${activityId}`] || 'Pendiente'; }
 function taskIsCompleted(siteId, activityId) { return taskStatus(siteId, activityId) === 'Completada'; }
 function taskHours(siteId, activityId) { return state.hoursSite.filter(h => h.site_id === siteId && h.activity_id === activityId).reduce((a, x) => a + Number(x.hours), 0); }
@@ -70,14 +80,16 @@ async function init() {
   // Las 3 consultas de catálogo son independientes entre sí: se piden en
   // paralelo (antes iban una detrás de otra) para que el primer ingreso a
   // la plataforma no tarde la suma de las 3, sino solo la más lenta.
-  const [{ data: companies }, { data: activities }, { data: rateRow }] = await Promise.all([
+  const [{ data: companies }, { data: activities }, { data: rateRow }, { data: siteActs }] = await Promise.all([
     sb.from('companies').select('id,name,sites(id,name)').order('name'),
     sb.from('activities').select('id,name,is_fixed').order('is_fixed', { ascending: false }).order('name'),
     sb.from('app_settings').select('value').eq('key', 'default_rate').maybeSingle(),
+    sb.from('site_activities').select('site_id,activity_id'),
   ]);
   state.companies = (companies || []).map(c => ({ ...c, sites: c.sites || [] }));
   state.activities = activities || [];
   if (rateRow) state.rate = Number(rateRow.value);
+  state.siteActivities = siteActs || [];
 
   $('filterMonth').value = monthNow();
   if ($('calendarDate')) $('calendarDate').value = today();
@@ -102,7 +114,7 @@ async function refreshAll() {
   // Las 7 consultas de esta sección tampoco dependen unas de otras, así que
   // también van todas en paralelo (se agregó aquí la de "monthly_bags" que
   // antes se pedía aparte, después de esperar todo lo anterior).
-  const [{ data: hours }, { data: evid }, { data: cal }, { data: statusRows }, { data: bagRow }, { data: targetRows }, { count }] = await Promise.all([
+  const [{ data: hours }, { data: evid }, { data: cal }, { data: statusRows }, { data: bagRow }, { data: targetRows }, { count }, { data: closedRows }] = await Promise.all([
     sb.from('hour_records').select('*').eq('site_id', s.id),
     sb.from('evidences').select('*').eq('site_id', s.id).order('record_date', { ascending: false }),
     sb.from('schedule_events').select('*').eq('site_id', s.id),
@@ -110,6 +122,7 @@ async function refreshAll() {
     sb.rpc('get_bag_summary', { p_site_id: s.id, p_month: `${selectedMonth()}-01` }),
     sb.from('activity_targets').select('activity_id,target_hours').eq('site_id', s.id),
     sb.from('monthly_bags').select('id', { count: 'exact', head: true }).eq('site_id', s.id).eq('month', `${selectedMonth()}-01`),
+    sb.from('month_closures').select('month').eq('site_id', s.id).is('reopened_at', null),
   ]);
   state.hoursSite = hours || [];
   state.evidencesSite = evid || [];
@@ -120,11 +133,13 @@ async function refreshAll() {
   (targetRows || []).forEach(r => { state.targetsMap[`${s.id}|${r.activity_id}`] = Number(r.target_hours); });
   state.bag = (bagRow && bagRow[0]) || { assigned: 0, additional: 0, carry: 0, total: 0, used: 0, remaining: 0 };
   state.bagExists = !!count;
+  state.closedMonths = new Set((closedRows || []).map(r => `${s.id}|${r.month.slice(0, 7)}`));
 
   renderBagAlert();
   renderDashboard();
   renderActivities();
   renderHours();
+  renderMonthCloseBanner();
   renderEvidences();
   renderConfig();
   renderCalendar();
@@ -195,7 +210,8 @@ function renderDashboard() {
   document.querySelector('#mAssigned').parentElement.querySelector('.sub').textContent = `Asignadas: ${bag.assigned} h · Saldo anterior: ${bag.carry} h · Adicionales: ${bag.additional} h`;
   document.querySelector('#mRemaining').parentElement.querySelector('.sub').textContent = `Disponible para ${m}`;
 
-  $('dashboardActivities').innerHTML = state.activities.map((t, i) => {
+  const dashActs = activitiesForSite(s.id);
+  $('dashboardActivities').innerHTML = dashActs.length ? dashActs.map((t, i) => {
     const status = taskStatus(s.id, t.id), completed = status === 'Completada';
     const totalH = taskHours(s.id, t.id), monthH = taskMonthHours(s.id, t.id, m);
     const btn = completed
@@ -211,7 +227,7 @@ function renderDashboard() {
       ${activityProgressBar(s.id, t.id, totalH)}
       <div style="margin-top:10px">${btn}</div>
     </div>`;
-  }).join('');
+  }).join('') : '<p class="empty">Esta sede todavía no tiene actividades asignadas. Agrégalas desde Configuración → Actividades.</p>';
 
   const rec = [...filteredHours()].sort((a, b) => b.record_date.localeCompare(a.record_date)).slice(0, 5);
   $('recentRecords').innerHTML = rec.length ? rec.map(x => `<div style="padding:9px 0;border-bottom:1px solid var(--line)"><b>${x.record_date}</b><div class="small">${taskName(x.activity_id)} · ${x.hours} h · ${x.status}</div></div>`).join('') : '<div class="empty">Aún no hay registros en este periodo.</div>';
@@ -219,7 +235,8 @@ function renderDashboard() {
 
 function renderActivities() {
   const s = site(), m = selectedMonth();
-  $('activitiesList').innerHTML = state.activities.map((t, i) => {
+  const acts = activitiesForSite(s.id);
+  $('activitiesList').innerHTML = acts.length ? acts.map((t, i) => {
     const status = taskStatus(s.id, t.id), completed = status === 'Completada';
     const totalH = taskHours(s.id, t.id), monthH = taskMonthHours(s.id, t.id, m);
     return `<div class="activity">
@@ -232,12 +249,73 @@ function renderActivities() {
       ${activityProgressBar(s.id, t.id, totalH)}
       <span class="badge ${completed ? 'done' : status === 'En proceso' ? 'progress' : 'pending'}">${status}</span>
     </div>`;
-  }).join('');
+  }).join('') : '<p class="empty">Esta sede todavía no tiene actividades asignadas. Agrégalas desde Configuración → Actividades.</p>';
 }
 
 function renderHours() {
   const s = site(), rows = state.hoursSite.filter(x => x.site_id === s.id).sort((a, b) => b.record_date.localeCompare(a.record_date));
-  $('hoursTable').innerHTML = rows.length ? rows.map(x => `<tr><td>${x.record_date}</td><td>${company().name}<br><span class="small">${s.name}</span></td><td>${taskName(x.activity_id)}</td><td><span class="badge ${x.status === 'Completado' ? 'done' : 'progress'}">${x.status}</span></td><td>${x.hours}</td><td>${money(x.rate)}</td><td>${money(x.hours * x.rate)}</td><td><button class="badge ${x.paid ? 'paid' : 'unpaid'}" data-requires-write onclick="togglePaid('${x.id}',${!x.paid})">${x.paid ? '✓ Pagado' : '⏳ Pendiente'}</button></td><td><button class="danger" data-requires-write onclick="deleteItem('hour_records','${x.id}')">Eliminar</button></td></tr>`).join('') : `<tr><td colspan="9" class="empty">No hay horas registradas.</td></tr>`;
+  $('hoursTable').innerHTML = rows.length ? rows.map(x => {
+    const closed = monthClosed(s.id, monthOf(x.record_date));
+    const editBtn = closed
+      ? `<span class="small" title="El mes de este registro ya está cerrado">🔒 Cerrado</span>`
+      : `<button class="secondary" data-requires-write onclick="editHours('${x.id}')">Editar</button>`;
+    return `<tr><td>${x.record_date}</td><td>${company().name}<br><span class="small">${s.name}</span></td><td>${taskName(x.activity_id)}</td><td><span class="badge ${x.status === 'Completado' ? 'done' : 'progress'}">${x.status}</span></td><td>${x.hours}</td><td>${money(x.rate)}</td><td>${money(x.hours * x.rate)}</td><td><button class="badge ${x.paid ? 'paid' : 'unpaid'}" data-requires-write onclick="togglePaid('${x.id}',${!x.paid})">${x.paid ? '✓ Pagado' : '⏳ Pendiente'}</button></td><td style="white-space:nowrap">${editBtn} <button class="danger" data-requires-write onclick="deleteItem('hour_records','${x.id}')">Eliminar</button></td></tr>`;
+  }).join('') : `<tr><td colspan="9" class="empty">No hay horas registradas.</td></tr>`;
+}
+
+// ---------------------------------------------------------------------------
+// Cierre mensual manual por sede (banner + acciones). Mientras el mes no se
+// cierre, las horas se pueden seguir editando; una vez cerrado, no se pueden
+// agregar ni editar horas de ese mes (se puede reabrir si hace falta).
+// ---------------------------------------------------------------------------
+const MONTH_NAMES_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+function renderMonthCloseBanner() {
+  const el = $('monthCloseBanner'); if (!el) return;
+  const s = site(); if (!s) { el.innerHTML = ''; return; }
+  const m = selectedMonth(), now = monthNow();
+  const closed = monthClosed(s.id, m);
+
+  if (m > now) { el.innerHTML = ''; return; } // mes futuro: nada que cerrar todavía
+
+  if (closed) {
+    el.innerHTML = `<div class="monthCloseBanner closedBanner">🔒 <b>Mes ${m} cerrado</b> para ${s.name}. Las horas de este mes ya no se pueden editar ni agregar.
+      <button class="secondary" data-requires-write onclick="reopenMonth()">Reabrir mes</button></div>`;
+    return;
+  }
+
+  if (m === now) {
+    const today_ = new Date();
+    const lastDay = new Date(today_.getFullYear(), today_.getMonth() + 1, 0);
+    const daysLeft = Math.max(0, Math.ceil((lastDay - today_) / 86400000));
+    const lastDayLabel = `${lastDay.getDate()} de ${MONTH_NAMES_ES[lastDay.getMonth()]}`;
+    el.innerHTML = `<div class="monthCloseBanner openBanner">🗓️ Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b> para terminar el mes · <b>Cierre de mes: ${lastDayLabel}</b>. Cierra el mes cuando ya hayas organizado y distribuido todas las horas.
+      <button class="primary" data-requires-write onclick="closeMonth()">Cerrar mes</button></div>`;
+    return;
+  }
+
+  el.innerHTML = `<div class="monthCloseBanner openBanner">⚠️ El mes ${m} ya pasó y todavía no se ha cerrado para ${s.name}.
+    <button class="primary" data-requires-write onclick="closeMonth()">Cerrar mes</button></div>`;
+}
+
+async function closeMonth() {
+  const s = site(); if (!s) return;
+  const m = selectedMonth();
+  if (!confirm(`¿Cerrar el mes ${m} para ${s.name}? Después de cerrarlo no se podrán agregar ni editar horas de ese mes (puedes reabrirlo si necesitas corregir algo).`)) return;
+  const { error } = await sb.from('month_closures').insert({ site_id: s.id, month: `${m}-01`, closed_by: currentProfile?.id });
+  if (error) return toast('No se pudo cerrar el mes: ' + error.message);
+  await refreshAll();
+  toast(`Mes ${m} cerrado para ${s.name}.`);
+}
+
+async function reopenMonth() {
+  const s = site(); if (!s) return;
+  const m = selectedMonth();
+  if (!confirm(`¿Reabrir el mes ${m} para ${s.name}? Se podrán volver a editar y agregar horas.`)) return;
+  const { error } = await sb.from('month_closures').update({ reopened_at: new Date().toISOString(), reopened_by: currentProfile?.id }).eq('site_id', s.id).eq('month', `${m}-01`).is('reopened_at', null);
+  if (error) return toast('No se pudo reabrir el mes: ' + error.message);
+  await refreshAll();
+  toast(`Mes ${m} reabierto para ${s.name}.`);
 }
 
 async function togglePaid(id, value) {
@@ -302,14 +380,33 @@ async function updateHoursBagInfo() {
 }
 function refreshHourTaskOptions() {
   const s = state.companies.find(x => x.id === $('hCompany').value)?.sites.find(x => x.id === $('hSite').value);
-  $('hTask').innerHTML = state.activities.map(t => `<option value="${t.id}" ${s && taskIsCompleted(s.id, t.id) ? 'disabled' : ''}>${t.name}${s && taskIsCompleted(s.id, t.id) ? ' — COMPLETADA' : ''}</option>`).join('');
+  const list = s ? activitiesForSite(s.id) : state.activities;
+  $('hTask').innerHTML = list.map(t => `<option value="${t.id}" ${s && taskIsCompleted(s.id, t.id) ? 'disabled' : ''}>${t.name}${s && taskIsCompleted(s.id, t.id) ? ' — COMPLETADA' : ''}</option>`).join('');
 }
+// null = registrar horas nuevas; con id = editando un registro ya existente.
+let editingHourId = null;
 function openHoursModal() {
+  editingHourId = null;
+  $('hoursModalTitle').textContent = 'Registrar horas';
+  $('hRate').disabled = true;
   fillCommon('hCompany', 'hSite', 'hTask'); $('hCompany').value = company().id; fillSiteSelect('hCompany', 'hSite'); $('hSite').value = site().id;
   $('hDate').value = today(); $('hRate').value = state.rate; $('hHours').value = ''; $('hStatus').value = 'En proceso'; $('hTotal').value = ''; $('hNotes').value = '';
   refreshHourTaskOptions(); updateHoursBagInfo(); openModal('hoursModal');
 }
-$('hHours')?.addEventListener('input', () => { $('hTotal').value = money(Number($('hHours').value || 0) * state.rate); });
+function editHours(id) {
+  const r = state.hoursSite.find(x => x.id === id); if (!r) return;
+  if (monthClosed(r.site_id, monthOf(r.record_date))) return toast('Este mes ya está cerrado. Usa "Reabrir mes" en Registro de horas si necesitas corregirlo.');
+  editingHourId = id;
+  $('hoursModalTitle').textContent = 'Editar horas';
+  const c = state.companies.find(x => x.sites.some(s => s.id === r.site_id));
+  fillCommon('hCompany', 'hSite', 'hTask');
+  $('hCompany').value = c ? c.id : company().id; fillSiteSelect('hCompany', 'hSite'); $('hSite').value = r.site_id;
+  refreshHourTaskOptions();
+  $('hTask').value = r.activity_id;
+  $('hDate').value = r.record_date; $('hRate').value = r.rate; $('hHours').value = r.hours; $('hStatus').value = r.status; $('hTotal').value = money(r.hours * r.rate); $('hNotes').value = r.notes || '';
+  updateHoursBagInfo(); openModal('hoursModal');
+}
+$('hHours')?.addEventListener('input', () => { $('hTotal').value = money(Number($('hHours').value || 0) * Number($('hRate').value || state.rate)); });
 $('hDate')?.addEventListener('change', updateHoursBagInfo);
 $('hCompany')?.addEventListener('change', () => { fillSiteSelect('hCompany', 'hSite'); refreshHourTaskOptions(); updateHoursBagInfo(); });
 $('hSite')?.addEventListener('change', () => { refreshHourTaskOptions(); updateHoursBagInfo(); });
@@ -319,18 +416,35 @@ async function saveHours() {
   const c = state.companies.find(x => x.id === $('hCompany').value), s = c?.sites.find(x => x.id === $('hSite').value), taskId = $('hTask').value, m = monthOf($('hDate').value);
   if (!s) return toast('Selecciona una sede válida');
   if (taskIsCompleted(s.id, taskId)) return toast('Esta actividad ya está completada y no admite más horas.');
+  if (monthClosed(s.id, m)) return toast('Ese mes ya está cerrado para esta sede. Reábrelo primero si necesitas cambiar algo.');
+  const wasEditing = !!editingHourId;
+  const editingRecord = wasEditing ? state.hoursSite.find(x => x.id === editingHourId) : null;
+  const oldHours = (editingRecord && editingRecord.site_id === s.id && monthOf(editingRecord.record_date) === m) ? Number(editingRecord.hours) : 0;
   const { data: bagData } = await sb.rpc('get_bag_summary', { p_site_id: s.id, p_month: `${m}-01` });
-  const available = (bagData && bagData[0]?.remaining) || 0;
-  if (h > available) { toast(`Para ${m} solo quedan ${available} h en la bolsa. Puedes agregar horas adicionales al mes.`); closeModal('hoursModal'); openAdditionalHoursModal(c.id, s.id, m); return; }
+  const available = ((bagData && bagData[0]?.remaining) || 0) + oldHours;
+  if (h > available) {
+    toast(`Para ${m} solo quedan ${available} h en la bolsa. Puedes agregar horas adicionales al mes.`);
+    if (!wasEditing) { closeModal('hoursModal'); openAdditionalHoursModal(c.id, s.id, m); }
+    return;
+  }
   const status = $('hStatus').value;
-  const { error } = await sb.from('hour_records').insert({
-    company_id: c.id, site_id: s.id, activity_id: taskId, record_date: $('hDate').value,
-    hours: h, rate: state.rate, status, notes: $('hNotes').value,
-    created_by: currentProfile?.id,
-  });
+  let error;
+  if (wasEditing) {
+    ({ error } = await sb.from('hour_records').update({
+      company_id: c.id, site_id: s.id, activity_id: taskId, record_date: $('hDate').value,
+      hours: h, rate: Number($('hRate').value) || state.rate, status, notes: $('hNotes').value,
+    }).eq('id', editingHourId));
+  } else {
+    ({ error } = await sb.from('hour_records').insert({
+      company_id: c.id, site_id: s.id, activity_id: taskId, record_date: $('hDate').value,
+      hours: h, rate: state.rate, status, notes: $('hNotes').value,
+      created_by: currentProfile?.id,
+    }));
+  }
   if (error) return toast('No se pudo guardar: ' + error.message);
+  editingHourId = null;
   closeModal('hoursModal'); await refreshAll();
-  toast(status === 'Completado' ? 'Horas registradas y actividad cerrada.' : 'Horas registradas. La actividad queda abierta para nuevos días.');
+  toast(wasEditing ? 'Horas actualizadas.' : (status === 'Completado' ? 'Horas registradas y actividad cerrada.' : 'Horas registradas. La actividad queda abierta para nuevos días.'));
 }
 
 // ---------------------------------------------------------------------------
@@ -346,23 +460,26 @@ async function updateActivityBagInfo() {
 // Opciones del select de actividad: cada actividad completada queda deshabilitada
 // (visible mas no seleccionable), en vez de bloquear todo el modal por una sola.
 function activityTaskOptions(siteId, selectedId) {
-  return state.activities.map(t => {
+  return activitiesForSite(siteId).map(t => {
     const completed = taskIsCompleted(siteId, t.id);
     const sel = t.id === selectedId ? 'selected' : '';
     return `<option value="${t.id}" ${completed ? 'disabled' : ''} ${sel}>${t.name}${completed ? ' — COMPLETADA' : ''}</option>`;
   }).join('');
 }
-// Primera actividad NO completada de la sede (o la primera de todas si están todas completadas).
+// Primera actividad NO completada de la sede (o la primera de las suyas si están todas completadas).
 function firstOpenActivity(siteId) {
-  const open = state.activities.find(t => !taskIsCompleted(siteId, t.id));
-  return open ? open.id : (state.activities[0]?.id || null);
+  const acts = activitiesForSite(siteId);
+  const open = acts.find(t => !taskIsCompleted(siteId, t.id));
+  return open ? open.id : (acts[0]?.id || null);
 }
 function openActivityModal(taskId) {
   $('aCompany').innerHTML = options(state.companies); $('aCompany').value = company().id;
   fillSiteSelect('aCompany', 'aSite'); $('aSite').value = site().id;
   const s = site();
   if (!s) return;
-  if (state.activities.every(t => taskIsCompleted(s.id, t.id))) { toast('Todas las actividades de esta sede ya están completadas.'); return; }
+  const acts = activitiesForSite(s.id);
+  if (!acts.length) { toast('Esta sede todavía no tiene actividades asignadas. Agrégalas desde Configuración → Actividades.'); return; }
+  if (acts.every(t => taskIsCompleted(s.id, t.id))) { toast('Todas las actividades de esta sede ya están completadas.'); return; }
   const chosen = taskId || firstOpenActivity(s.id);
   $('aTask').innerHTML = activityTaskOptions(s.id, chosen);
   $('aTask').value = chosen;
@@ -433,7 +550,13 @@ async function saveActivity() {
 // ---------------------------------------------------------------------------
 // Evidencias
 // ---------------------------------------------------------------------------
-function openEvidenceModal() { fillCommon('eCompany', 'eSite', 'eTask'); $('eCompany').value = company().id; fillSiteSelect('eCompany', 'eSite'); $('eSite').value = site().id; $('eDate').value = today(); $('eLink').value = ''; $('eDesc').value = ''; $('eFile').value = ''; openModal('evidenceModal'); }
+function refreshEvidenceTaskOptions() {
+  const s = state.companies.find(x => x.id === $('eCompany').value)?.sites.find(x => x.id === $('eSite').value);
+  $('eTask').innerHTML = options(s ? activitiesForSite(s.id) : state.activities);
+}
+function openEvidenceModal() { fillCommon('eCompany', 'eSite', 'eTask'); $('eCompany').value = company().id; fillSiteSelect('eCompany', 'eSite'); $('eSite').value = site().id; refreshEvidenceTaskOptions(); $('eDate').value = today(); $('eLink').value = ''; $('eDesc').value = ''; $('eFile').value = ''; openModal('evidenceModal'); }
+$('eCompany')?.addEventListener('change', () => { fillSiteSelect('eCompany', 'eSite'); refreshEvidenceTaskOptions(); });
+$('eSite')?.addEventListener('change', refreshEvidenceTaskOptions);
 async function saveEvidence() {
   const file = $('eFile').files[0], link = $('eLink').value.trim();
   if (!file && !link) return toast('Carga un archivo o agrega un link');
@@ -471,7 +594,7 @@ function showConfig(tab, btn) {
 
 async function renderConfig() {
   const m = selectedMonth();
-  $('cfg-companies').innerHTML = `<div class="panelhead"><h2>Empresas</h2><button class="primary" data-requires-write onclick="openModal('companyModal')">+ Agregar empresa</button></div><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sedes</th><th></th></tr></thead><tbody>${state.companies.map(c => `<tr><td>${c.name}</td><td>${c.sites.length}</td><td><button class="danger" data-requires-write onclick="removeCompany('${c.id}')">Eliminar</button></td></tr>`).join('')}</tbody></table></div>`;
+  $('cfg-companies').innerHTML = `<div class="panelhead"><h2>Empresas</h2><button class="primary" data-requires-write onclick="openCompanyWizard()">+ Agregar empresa</button></div><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sedes</th><th></th></tr></thead><tbody>${state.companies.map(c => `<tr><td>${c.name}</td><td>${c.sites.length}</td><td><button class="danger" data-requires-write onclick="removeCompany('${c.id}')">Eliminar</button></td></tr>`).join('')}</tbody></table></div>`;
 
   const rows = [];
   for (const c of state.companies) {
@@ -481,16 +604,142 @@ async function renderConfig() {
       rows.push(`<tr><td>${c.name}</td><td>${s.name}</td><td>${b.assigned} h</td><td>${b.carry} h</td><td>${b.additional} h</td><td>${b.used} h</td><td><b>${b.remaining} h</b></td><td><button class="primary" data-requires-write onclick="openMonthlyBagModal('${c.id}','${s.id}','${m}')">Asignar</button> <button class="success" data-requires-write onclick="openAdditionalHoursModal('${c.id}','${s.id}','${m}')">+ Horas</button> <button class="danger" data-requires-write onclick="removeSite('${c.id}','${s.id}')">Eliminar</button></td></tr>`);
     }
   }
-  $('cfg-sites').innerHTML = `<div class="panelhead"><h2>Bolsas mensuales de horas</h2><div><button class="success" data-requires-write onclick="openMonthlyBagModal()">+ Asignar bolsa del mes</button> <button class="primary" data-requires-write onclick="openSiteModal()">+ Agregar sede</button></div></div><p class="small">Periodo mostrado: <b>${m}</b>. El saldo no utilizado del mes anterior se suma automáticamente como saldo a favor.</p><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sede</th><th>Asignadas</th><th>Saldo anterior</th><th>Adicionales</th><th>Usadas</th><th>Disponibles</th><th>Acción</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+  $('cfg-sites').innerHTML = `<div class="panelhead"><h2>Bolsas mensuales de horas</h2><div><button class="success" data-requires-write onclick="openMonthlyBagModal()">+ Asignar bolsa del mes</button> <button class="primary" data-requires-write onclick="openSiteWizard()">+ Agregar sede</button></div></div><p class="small">Periodo mostrado: <b>${m}</b>. El saldo no utilizado del mes anterior se suma automáticamente como saldo a favor.</p><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sede</th><th>Asignadas</th><th>Saldo anterior</th><th>Adicionales</th><th>Usadas</th><th>Disponibles</th><th>Acción</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 
   $('cfg-rates').innerHTML = `<div class="panelhead"><h2>Tarifa de referencia</h2></div><div class="formgrid"><div><label>Valor por hora (COP)</label><input id="globalRate" type="number" value="${state.rate}"></div></div><div class="actions"><button class="primary" data-requires-write onclick="updateRate()">Guardar tarifa</button></div><p class="small">La tarifa configurada se propone para nuevos registros. Cada registro conserva su propia tarifa.</p>`;
   $('cfg-tasks').innerHTML = `<div class="panelhead"><h2>Actividades del proyecto</h2><button class="primary" data-requires-write onclick="addTaskPrompt()">+ Nueva actividad</button></div>${state.activities.map(t => `<div class="activity"><b>${t.name}</b>${t.is_fixed ? '<div class="small">Actividad inicial establecida</div>' : '<div class="small">Actividad agregada</div>'}</div>`).join('')}`;
 }
 
-async function addCompany() { const n = $('newCompany').value.trim(); if (!n) return toast('Ingresa el nombre'); const { error } = await sb.from('companies').insert({ name: n }); if (error) return toast(error.message); $('newCompany').value = ''; closeModal('companyModal'); await init(); toast('Empresa agregada'); }
 async function removeCompany(id) { if (state.companies.length <= 1) return toast('Debe existir al menos una empresa'); if (confirm('¿Eliminar empresa y sus sedes?')) { const { error } = await sb.from('companies').delete().eq('id', id); if (error) return toast(error.message); await init(); } }
-function openSiteModal() { $('sCompany').innerHTML = options(state.companies); $('newSite').value = ''; $('newSiteHours').value = 0; openModal('siteModal'); }
-async function addSite() { const c = state.companies.find(x => x.id === $('sCompany').value), n = $('newSite').value.trim(); if (!n) return toast('Ingresa la sede'); const { error } = await sb.from('sites').insert({ company_id: c.id, name: n }); if (error) return toast(error.message); closeModal('siteModal'); await init(); toast('Sede agregada. Ahora puedes asignar la bolsa del mes.'); }
+
+// ---------------------------------------------------------------------------
+// Wizard: Agregar empresa/sede en 3 pasos (Empresa -> Sede -> Actividades).
+// Al guardar se crean empresa (si aplica) + sede + actividades nuevas (si se
+// escribieron) y se asignan todas las actividades marcadas a esa sede en
+// site_activities, en un solo flujo.
+// ---------------------------------------------------------------------------
+let wizardMode = 'company'; // 'company' (empresa nueva) | 'site' (sede nueva en empresa existente)
+let wizardStep = 1;
+let wizardSelectedActivityIds = new Set();
+let wizardNewActivities = [];
+
+function openCompanyWizard() {
+  wizardMode = 'company'; wizardSelectedActivityIds = new Set(); wizardNewActivities = [];
+  $('wizardTitle').textContent = 'Agregar empresa';
+  $('wizStepCompanyNew').style.display = 'block';
+  $('wizStepCompanyExisting').style.display = 'none';
+  $('wizCompanyName').value = '';
+  $('wizSiteName').value = ''; $('wizSiteHours').value = 0;
+  $('wizNewActivityName').value = '';
+  wizardShowStep(1);
+  openModal('companyWizardModal');
+}
+
+function openSiteWizard() {
+  if (!state.companies.length) return toast('Primero agrega una empresa.');
+  wizardMode = 'site'; wizardSelectedActivityIds = new Set(); wizardNewActivities = [];
+  $('wizardTitle').textContent = 'Agregar sede';
+  $('wizStepCompanyNew').style.display = 'none';
+  $('wizStepCompanyExisting').style.display = 'block';
+  $('wizCompanySelect').innerHTML = options(state.companies);
+  $('wizCompanySelect').value = company()?.id || state.companies[0].id;
+  $('wizSiteName').value = ''; $('wizSiteHours').value = 0;
+  $('wizNewActivityName').value = '';
+  wizardShowStep(1);
+  openModal('companyWizardModal');
+}
+
+function wizardShowStep(n) {
+  wizardStep = n;
+  [1, 2, 3].forEach(i => $('wizardPane' + i).style.display = i === n ? 'block' : 'none');
+  document.querySelectorAll('.wizardStep').forEach(el => el.classList.toggle('active', Number(el.dataset.step) === n));
+  $('wizBackBtn').style.display = n > 1 ? 'inline-block' : 'none';
+  $('wizNextBtn').textContent = n === 3 ? 'Guardar' : 'Siguiente';
+  if (n === 3) renderWizardActivities();
+}
+
+function renderWizardActivities() {
+  const existing = state.activities.map(a => `
+    <label class="wizActivityRow">
+      <input type="checkbox" value="${a.id}" ${wizardSelectedActivityIds.has(a.id) ? 'checked' : ''} onchange="wizardToggleActivity('${a.id}', this.checked)">
+      ${a.name}
+    </label>`).join('');
+  const fresh = wizardNewActivities.map((name, i) => `
+    <label class="wizActivityRow wizActivityNew">
+      <input type="checkbox" checked disabled> ${name} <span class="small">(nueva)</span>
+      <button type="button" class="linklike" onclick="wizardRemoveNewActivity(${i})">quitar</button>
+    </label>`).join('');
+  $('wizActivitiesList').innerHTML = existing + fresh || '<p class="small">Todavía no hay actividades en el catálogo. Escribe una abajo para crearla.</p>';
+}
+function wizardToggleActivity(id, checked) { checked ? wizardSelectedActivityIds.add(id) : wizardSelectedActivityIds.delete(id); }
+function wizardAddNewActivity() {
+  const n = $('wizNewActivityName').value.trim();
+  if (!n) return toast('Escribe el nombre de la actividad');
+  wizardNewActivities.push(n);
+  $('wizNewActivityName').value = '';
+  renderWizardActivities();
+}
+function wizardRemoveNewActivity(i) { wizardNewActivities.splice(i, 1); renderWizardActivities(); }
+
+function wizardBack() { if (wizardStep > 1) wizardShowStep(wizardStep - 1); }
+
+async function wizardNext() {
+  if (wizardStep === 1) {
+    if (wizardMode === 'company') {
+      if (!$('wizCompanyName').value.trim()) return toast('Ingresa el nombre de la empresa');
+    } else if (!$('wizCompanySelect').value) {
+      return toast('Selecciona una empresa');
+    }
+    return wizardShowStep(2);
+  }
+  if (wizardStep === 2) {
+    if (!$('wizSiteName').value.trim()) return toast('Ingresa el nombre de la sede');
+    return wizardShowStep(3);
+  }
+  await wizardSave();
+}
+
+async function wizardSave() {
+  const btn = $('wizNextBtn'); btn.disabled = true; const originalText = btn.textContent; btn.textContent = 'Guardando…';
+  try {
+    let companyId;
+    if (wizardMode === 'company') {
+      const { data, error } = await sb.from('companies').insert({ name: $('wizCompanyName').value.trim() }).select('id').single();
+      if (error) return toast(error.message);
+      companyId = data.id;
+    } else {
+      companyId = $('wizCompanySelect').value;
+    }
+
+    const { data: siteData, error: siteError } = await sb.from('sites').insert({ company_id: companyId, name: $('wizSiteName').value.trim() }).select('id').single();
+    if (siteError) return toast(siteError.message);
+    const siteId = siteData.id;
+
+    const hoursAssigned = Number($('wizSiteHours').value || 0);
+    if (hoursAssigned > 0) {
+      await sb.from('monthly_bags').insert({ site_id: siteId, month: `${monthNow()}-01`, assigned_hours: hoursAssigned, assigned_date: today(), created_by: currentProfile?.id });
+    }
+
+    const allActivityIds = new Set(wizardSelectedActivityIds);
+    for (const name of wizardNewActivities) {
+      const { data: actData, error: actError } = await sb.from('activities').insert({ name, is_fixed: false }).select('id').single();
+      if (actError) { toast(`No se pudo crear la actividad "${name}": ${actError.message}`); continue; }
+      allActivityIds.add(actData.id);
+    }
+
+    if (allActivityIds.size > 0) {
+      const rows = [...allActivityIds].map(activity_id => ({ site_id: siteId, activity_id, created_by: currentProfile?.id }));
+      const { error: linkError } = await sb.from('site_activities').insert(rows);
+      if (linkError) toast('Sede creada, pero hubo un problema asignando actividades: ' + linkError.message);
+    }
+
+    closeModal('companyWizardModal');
+    await init();
+    toast('Listo: empresa, sede y actividades guardadas.');
+  } finally {
+    btn.disabled = false; btn.textContent = originalText;
+  }
+}
 
 async function openMonthlyBagModal(cid, sid, m) {
   const c = cid ? state.companies.find(x => x.id === cid) : company(), s = sid ? c?.sites.find(x => x.id === sid) : site(), month = m || selectedMonth();

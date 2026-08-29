@@ -110,6 +110,10 @@ function showEventInfo(id) {
     resendBtn.style.display = e.leader_email ? 'inline-flex' : 'none';
     resendBtn.onclick = () => prepareScheduleEmail(e.id);
   }
+  const deleteBtn = $('eventInfoDeleteBtn');
+  if (deleteBtn) {
+    deleteBtn.onclick = async () => { await deleteSchedule(e.id); closeModal('eventInfoModal'); };
+  }
   openModal('eventInfoModal');
 }
 

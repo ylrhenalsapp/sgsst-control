@@ -117,7 +117,7 @@
 </section>
 
 <section id="horas" class="section">
-<div class="panel"><div class="panelhead"><h2>Registro de horas</h2><button class="primary" data-requires-write onclick="openHoursModal()">+ Registrar horas</button></div><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Empresa / Sede</th><th>Actividad</th><th>Estado</th><th>Horas</th><th>Tarifa</th><th>Valor</th><th>Pago</th><th>Acción</th></tr></thead><tbody id="hoursTable"></tbody></table></div></div>
+<div class="panel"><div class="panelhead"><h2>Registro de horas</h2><button class="primary" data-requires-write onclick="openHoursModal()">+ Registrar horas</button></div><div id="monthCloseBanner"></div><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Empresa / Sede</th><th>Actividad</th><th>Estado</th><th>Horas</th><th>Tarifa</th><th>Valor</th><th>Pago</th><th>Acción</th></tr></thead><tbody id="hoursTable"></tbody></table></div></div>
 </section>
 
 <section id="evidencias" class="section">
@@ -184,7 +184,7 @@
   <a class="mtab" onclick="toggleMobileMenu()"><span class="mtabIcon">⋯</span>Más</a>
 </nav>
 
-<div class="modal" id="hoursModal"><div class="modalbox"><h2>Registrar horas</h2>
+<div class="modal" id="hoursModal"><div class="modalbox"><h2 id="hoursModalTitle">Registrar horas</h2>
 <div class="formgrid">
 <div><label>Empresa</label><select id="hCompany" onchange="fillSiteSelect('hCompany','hSite')"></select></div>
 <div><label>Sede</label><select id="hSite"></select></div>
@@ -216,8 +216,36 @@
 <div class="full"><label>Descripción</label><textarea id="eDesc" placeholder="Descripción breve de la evidencia"></textarea></div>
 </div><div class="actions"><button class="secondary" onclick="closeModal('evidenceModal')">Cancelar</button><button class="primary" onclick="saveEvidence()">Guardar evidencia</button></div></div></div>
 
-<div class="modal" id="companyModal"><div class="modalbox"><h2>Agregar empresa</h2><input id="newCompany" placeholder="Nombre de la empresa"><div class="actions"><button class="secondary" onclick="closeModal('companyModal')">Cancelar</button><button class="primary" onclick="addCompany()">Guardar</button></div></div></div>
-<div class="modal" id="siteModal"><div class="modalbox"><h2>Agregar sede</h2><div class="formgrid"><div class="full"><label>Empresa</label><select id="sCompany"></select></div><div><label>Nombre de sede</label><input id="newSite"></div><div><label>Horas asignadas</label><input id="newSiteHours" type="number" min="0" value="0"></div></div><div class="actions"><button class="secondary" onclick="closeModal('siteModal')">Cancelar</button><button class="primary" onclick="addSite()">Guardar</button></div></div></div>
+<div class="modal" id="companyWizardModal"><div class="modalbox">
+  <h2 id="wizardTitle">Agregar empresa</h2>
+  <div class="wizardSteps">
+    <span class="wizardStep" data-step="1">1. Empresa</span>
+    <span class="wizardStep" data-step="2">2. Sede</span>
+    <span class="wizardStep" data-step="3">3. Actividades</span>
+  </div>
+  <div class="wizardPane" id="wizardPane1">
+    <div id="wizStepCompanyNew"><label>Nombre de la empresa</label><input id="wizCompanyName" placeholder="Nombre de la empresa"></div>
+    <div id="wizStepCompanyExisting" style="display:none"><label>Empresa</label><select id="wizCompanySelect"></select></div>
+  </div>
+  <div class="wizardPane" id="wizardPane2" style="display:none">
+    <label>Nombre de la sede</label><input id="wizSiteName" placeholder="Ej: Sede Principal">
+    <label style="margin-top:10px;display:block">Horas asignadas del mes actual (opcional)</label><input id="wizSiteHours" type="number" min="0" value="0">
+  </div>
+  <div class="wizardPane" id="wizardPane3" style="display:none">
+    <label>Actividades para esta sede</label>
+    <p class="small">Marca las actividades del catálogo que aplican a esta sede, o escribe el nombre de una actividad nueva y agrégala a la lista.</p>
+    <div id="wizActivitiesList" class="wizActivitiesList"></div>
+    <div class="wizAddActivity">
+      <input id="wizNewActivityName" placeholder="Nombre de una actividad nueva...">
+      <button type="button" class="secondary" onclick="wizardAddNewActivity()">+ Agregar a la lista</button>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="secondary" onclick="closeModal('companyWizardModal')">Cancelar</button>
+    <button class="secondary" id="wizBackBtn" style="display:none" onclick="wizardBack()">Atrás</button>
+    <button class="primary" id="wizNextBtn" onclick="wizardNext()">Siguiente</button>
+  </div>
+</div></div>
 <div class="modal" id="addHoursModal"><div class="modalbox"><h2>Agregar horas adicionales a la bolsa</h2>
 <p class="small">Estas horas quedarán registradas como un adicional independiente de las horas originales asignadas a la sede.</p>
 <div class="formgrid">
@@ -260,6 +288,7 @@
 <div id="eventInfoBody" class="eventInfoBody"></div>
 <div class="actions">
   <button class="secondary" onclick="closeModal('eventInfoModal')">Cerrar</button>
+  <button class="danger" data-requires-write id="eventInfoDeleteBtn">🗑️ Eliminar</button>
   <button class="primary" id="eventInfoResendBtn">🔄 Reenviar citación</button>
 </div>
 </div></div>
