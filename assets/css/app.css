@@ -26,8 +26,8 @@ body{min-width:0}
 .userLoginBadge{font-size:12px;padding:6px 10px;border-radius:999px;background:#e8f4ee;color:#256b4c;font-weight:700}
 .loginOverlay{position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#eef2f6,#fff);display:flex;align-items:center;justify-content:center;padding:20px}
 .loginCard{width:min(520px,100%);background:#fff;border:1px solid var(--line);box-shadow:0 20px 60px rgba(18,35,52,.18);border-radius:24px;padding:30px}
-.loginBrand{display:flex;align-items:center;gap:16px;margin-bottom:22px}
-.loginBrand img{width:100%;max-width:100%;height:auto;border-radius:12px;border:1px solid #eef1f4}
+.loginBrand{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:22px}
+.loginBrand img{width:auto;max-width:280px;height:auto;border-radius:0;border:none}
 .loginCard h1{margin:0 0 8px;color:var(--navy);font-size:28px}
 .loginCard p{margin:0 0 18px;color:#5f6b76}
 .loginHint{font-size:12px;color:#7b8792;margin-top:12px}
@@ -208,7 +208,7 @@ tbody tr:hover{background:#f7fbfd}
   box-shadow:0 28px 80px rgba(20,47,67,.18)!important;
   background:rgba(255,255,255,.96)!important
 }
-.loginBrand img{border:none!important;box-shadow:0 8px 28px rgba(22,49,72,.08)}
+.loginBrand img{border:none!important;box-shadow:none!important}
 .loginCard h1{color:var(--navy)!important}
 .section.active{animation:fadeUp .25s ease}
 @keyframes fadeUp{from{opacity:.25;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
