@@ -673,7 +673,7 @@ async function renderConfig() {
   $('cfg-sites').innerHTML = `<div class="panelhead"><h2>Bolsas mensuales de horas</h2><div><button class="success" data-requires-write onclick="openMonthlyBagModal()">+ Asignar bolsa del mes</button> <button class="primary" data-requires-write onclick="openSiteWizard()">+ Agregar sede</button></div></div><p class="small">Periodo mostrado: <b>${m}</b>. El saldo no utilizado del mes anterior se suma automáticamente como saldo a favor.</p><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sede</th><th>Asignadas</th><th>Saldo anterior</th><th>Adicionales</th><th>Usadas</th><th>Disponibles</th><th>Acción</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 
   $('cfg-rates').innerHTML = `<div class="panelhead"><h2>Tarifa de referencia</h2></div><div class="formgrid"><div><label>Valor por hora (COP)</label><input id="globalRate" type="number" value="${state.rate}"></div></div><div class="actions"><button class="primary" data-requires-write onclick="updateRate()">Guardar tarifa</button></div><p class="small">La tarifa configurada se propone para nuevos registros. Cada registro conserva su propia tarifa.</p>`;
-  $('cfg-tasks').innerHTML = `<div class="panelhead"><h2>Actividades del proyecto</h2><button class="primary" data-requires-write onclick="addTaskPrompt()">+ Nueva actividad</button></div>${state.activities.map(t => `<div class="activity"><b>${t.name}</b>${t.is_fixed ? '<div class="small">Actividad inicial establecida</div>' : '<div class="small">Actividad agregada</div>'}</div>`).join('')}`;
+  $('cfg-tasks').innerHTML = `<div class="panelhead"><h2>Actividades del proyecto</h2><button class="primary" data-requires-write onclick="addTaskPrompt()">+ Nueva actividad</button></div>${state.activities.map(t => `<div class="activity"><div class="activityTop"><div><b>${t.name}</b>${t.is_fixed ? '<div class="small">Actividad inicial establecida</div>' : '<div class="small">Actividad agregada</div>'}</div><button class="secondary" data-requires-write onclick="editTaskPrompt('${t.id}')">✏️ Editar nombre</button></div></div>`).join('')}`;
 }
 
 async function removeCompany(id) { if (state.companies.length <= 1) return toast('Debe existir al menos una empresa'); if (confirm('¿Eliminar empresa y sus sedes?')) { const { error } = await sb.from('companies').delete().eq('id', id); if (error) return toast(error.message); await init(); } }
@@ -765,25 +765,50 @@ async function wizardNext() {
   await wizardSave();
 }
 
+// Código de Postgres para "unique_violation" (ej: nombre de empresa/sede
+// repetido). Se usa para que reintentar el wizard después de una falla a
+// mitad de camino (por ejemplo, la empresa sí se creó pero la sede o las
+// actividades fallaron) no quede bloqueado por un choque de nombres: en vez
+// de fallar, se reutiliza el registro que ya existe y se continúa.
+const PG_UNIQUE_VIOLATION = '23505';
+
 async function wizardSave() {
   const btn = $('wizNextBtn'); btn.disabled = true; const originalText = btn.textContent; btn.textContent = 'Guardando…';
   try {
     let companyId;
     if (wizardMode === 'company') {
-      const { data, error } = await sb.from('companies').insert({ name: $('wizCompanyName').value.trim() }).select('id').single();
-      if (error) return toast(error.message);
-      companyId = data.id;
+      const companyName = $('wizCompanyName').value.trim();
+      const { data, error } = await sb.from('companies').insert({ name: companyName }).select('id').single();
+      if (error && error.code === PG_UNIQUE_VIOLATION) {
+        const { data: existing, error: findError } = await sb.from('companies').select('id').eq('name', companyName).maybeSingle();
+        if (findError || !existing) return toast('Ya existe una empresa con ese nombre, pero no se pudo recuperar: ' + (findError?.message || 'sin detalle'));
+        companyId = existing.id;
+        toast('Ya existía una empresa con ese nombre — se usará esa y se continúa con la sede.');
+      } else if (error) {
+        return toast(error.message);
+      } else {
+        companyId = data.id;
+      }
     } else {
       companyId = $('wizCompanySelect').value;
     }
 
-    const { data: siteData, error: siteError } = await sb.from('sites').insert({ company_id: companyId, name: $('wizSiteName').value.trim() }).select('id').single();
-    if (siteError) return toast(siteError.message);
-    const siteId = siteData.id;
-
-    const hoursAssigned = Number($('wizSiteHours').value || 0);
-    if (hoursAssigned > 0) {
-      await sb.from('monthly_bags').insert({ site_id: siteId, month: `${monthNow()}-01`, assigned_hours: hoursAssigned, assigned_date: today(), created_by: currentProfile?.id });
+    const siteName = $('wizSiteName').value.trim();
+    let siteId;
+    const { data: siteData, error: siteError } = await sb.from('sites').insert({ company_id: companyId, name: siteName }).select('id').single();
+    if (siteError && siteError.code === PG_UNIQUE_VIOLATION) {
+      const { data: existingSite, error: findSiteError } = await sb.from('sites').select('id').eq('company_id', companyId).eq('name', siteName).maybeSingle();
+      if (findSiteError || !existingSite) return toast('Ya existe una sede con ese nombre, pero no se pudo recuperar: ' + (findSiteError?.message || 'sin detalle'));
+      siteId = existingSite.id;
+      toast('Ya existía una sede con ese nombre — se usará esa y se continúa con las actividades.');
+    } else if (siteError) {
+      return toast(siteError.message);
+    } else {
+      siteId = siteData.id;
+      const hoursAssigned = Number($('wizSiteHours').value || 0);
+      if (hoursAssigned > 0) {
+        await sb.from('monthly_bags').insert({ site_id: siteId, month: `${monthNow()}-01`, assigned_hours: hoursAssigned, assigned_date: today(), created_by: currentProfile?.id });
+      }
     }
 
     const allActivityIds = new Set(wizardSelectedActivityIds);
@@ -794,9 +819,16 @@ async function wizardSave() {
     }
 
     if (allActivityIds.size > 0) {
-      const rows = [...allActivityIds].map(activity_id => ({ site_id: siteId, activity_id, created_by: currentProfile?.id }));
-      const { error: linkError } = await sb.from('site_activities').insert(rows);
-      if (linkError) toast('Sede creada, pero hubo un problema asignando actividades: ' + linkError.message);
+      // Si la sede ya existía (retomando un intento anterior), puede que
+      // alguna de estas actividades ya estuviera asignada: no la volvemos a
+      // insertar para no duplicar ni fallar por eso.
+      const { data: already } = await sb.from('site_activities').select('activity_id').eq('site_id', siteId);
+      const alreadyIds = new Set((already || []).map(r => r.activity_id));
+      const rows = [...allActivityIds].filter(id => !alreadyIds.has(id)).map(activity_id => ({ site_id: siteId, activity_id, created_by: currentProfile?.id }));
+      if (rows.length) {
+        const { error: linkError } = await sb.from('site_activities').insert(rows);
+        if (linkError) toast('Sede creada, pero hubo un problema asignando actividades: ' + linkError.message);
+      }
     }
 
     closeModal('companyWizardModal');
@@ -944,6 +976,21 @@ async function saveAdditionalHours() {
 async function removeSite(cid, sid) { const c = state.companies.find(x => x.id === cid); if (c.sites.length <= 1) return toast('La empresa debe conservar al menos una sede'); if (confirm('¿Eliminar sede?')) { const { error } = await sb.from('sites').delete().eq('id', sid); if (error) return toast(error.message); await init(); } }
 async function updateRate() { const v = Number($('globalRate').value || 0); const { error } = await sb.from('app_settings').upsert({ key: 'default_rate', value: v }); if (error) return toast(error.message); state.rate = v; toast('Tarifa actualizada'); }
 async function addTaskPrompt() { const n = prompt('Nombre de la nueva actividad:'); if (!n?.trim()) return; const { error } = await sb.from('activities').insert({ name: n.trim(), is_fixed: false }); if (error) return toast(error.message); await init(); toast('Actividad agregada'); }
+// Corrige el nombre de una actividad del catálogo (por ejemplo, si quedó mal
+// escrita al crearla). Cambia el nombre en todas las sedes donde ya está
+// asignada y en el historial de horas/evidencias/informes, que solo guardan
+// el id de la actividad — no hay que reasignar nada.
+async function editTaskPrompt(id) {
+  const t = state.activities.find(x => x.id === id); if (!t) return;
+  const n = prompt('Nuevo nombre de la actividad:', t.name);
+  if (n === null) return; // canceló
+  if (!n.trim()) return toast('El nombre no puede quedar vacío');
+  if (n.trim() === t.name) return;
+  const { error } = await sb.from('activities').update({ name: n.trim() }).eq('id', id);
+  if (error) return toast('No se pudo actualizar: ' + error.message);
+  await init();
+  toast('Nombre de la actividad actualizado.');
+}
 
 document.addEventListener('click', e => { if (window.innerWidth <= 900 && e.target.closest('.nav a')) toggleMobileMenu(false); });
 function toggleMobileMenu(force) {
