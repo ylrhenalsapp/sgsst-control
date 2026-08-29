@@ -8,6 +8,7 @@
 function scheduleCompanyChanged() { fillSiteSelect('scCompany', 'scSite'); }
 
 function openScheduleModal() {
+  if (!company() || !site()) return toast('Primero agrega una empresa y una sede desde Configuración.');
   fillCommon('scCompany', 'scSite', 'scTask');
   $('scCompany').value = company().id; fillSiteSelect('scCompany', 'scSite'); $('scSite').value = site().id;
   $('scLeader').value = ''; $('scEmail').value = ''; $('scProposedDate').value = ''; $('scProposedTime').value = '';

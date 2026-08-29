@@ -118,7 +118,31 @@ async function refreshAll() {
   refreshSitesFilter();
   if ($('reportMonth') && !$('reportMonth').value) $('reportMonth').value = selectedMonth();
   const s = site();
-  if (!s) return;
+  if (!s) {
+    // Todavía no hay ninguna empresa/sede creada (primera vez usando el
+    // panel, o justo después de vaciar los datos de prueba). No hay nada
+    // que consultar por sede, pero igual hay que pintar Configuración para
+    // que aparezcan los botones "+ Agregar empresa" / "+ Agregar sede" /
+    // "+ Nueva actividad" — antes esta función se detenía aquí mismo y
+    // Configuración se quedaba en blanco para siempre.
+    state.hoursSite = []; state.evidencesSite = []; state.calendarSite = [];
+    state.statusMap = {}; state.targetsMap = {};
+    state.bag = { assigned: 0, additional: 0, carry: 0, total: 0, used: 0, remaining: 0 };
+    state.bagExists = false;
+    state.closedMonths = new Set();
+    renderBagAlert();
+    renderDashboard();
+    renderActivities();
+    renderHours();
+    renderMonthCloseBanner();
+    renderEvidences();
+    await renderConfig();
+    renderCalendar();
+    renderNotifBell();
+    renderMiniCalendar();
+    if (typeof renderFullCalendar === 'function') renderFullCalendar();
+    return;
+  }
 
   // Las 7 consultas de esta sección tampoco dependen unas de otras, así que
   // también van todas en paralelo (se agregó aquí la de "monthly_bags" que
@@ -198,6 +222,7 @@ function filteredHours() { const s = site(), m = selectedMonth(); return state.h
 function renderBagAlert() {
   const banner = $('bagAlertBanner');
   if (!banner) return;
+  if (!site()) { banner.style.display = 'none'; return; }
   if (!state.bagExists) {
     banner.style.display = 'block';
     banner.innerHTML = `⚠️ Todavía no se ha creado la <b>bolsa de horas de ${selectedMonth()}</b> para esta sede. <button class="secondary" style="margin-left:8px" onclick="openMonthlyBagModal()">+ Asignar bolsa del mes</button>`;
@@ -210,7 +235,16 @@ function renderBagAlert() {
 // Dashboard
 // ---------------------------------------------------------------------------
 function renderDashboard() {
-  const s = site(), m = selectedMonth(), bag = state.bag;
+  const s = site();
+  if (!s) {
+    $('mAssigned').textContent = '0 h'; $('mUsed').textContent = '0 h'; $('mRemaining').textContent = '0 h'; $('mValue').textContent = money(0);
+    document.querySelector('#mAssigned').parentElement.querySelector('.sub').textContent = 'Asignadas: 0 h · Saldo anterior: 0 h · Adicionales: 0 h';
+    document.querySelector('#mRemaining').parentElement.querySelector('.sub').textContent = `Disponible para ${selectedMonth()}`;
+    $('dashboardActivities').innerHTML = '<p class="empty">Todavía no tienes ninguna empresa registrada. Ve a Configuración → Empresas y agrega la primera para empezar.</p>';
+    $('recentRecords').innerHTML = '<div class="empty">Aún no hay registros.</div>';
+    return;
+  }
+  const m = selectedMonth(), bag = state.bag;
   const hs = filteredHours(), value = hs.reduce((a, x) => a + Number(x.hours) * Number(x.rate), 0);
   $('mAssigned').textContent = bag.total + ' h';
   $('mUsed').textContent = bag.used + ' h';
@@ -242,7 +276,9 @@ function renderDashboard() {
 }
 
 function renderActivities() {
-  const s = site(), m = selectedMonth();
+  const s = site();
+  if (!s) { $('activitiesList').innerHTML = '<p class="empty">Todavía no tienes ninguna empresa registrada. Ve a Configuración → Empresas y agrega la primera para empezar.</p>'; return; }
+  const m = selectedMonth();
   const acts = activitiesForSite(s.id);
   $('activitiesList').innerHTML = acts.length ? acts.map((t, i) => {
     const status = taskStatus(s.id, t.id), completed = status === 'Completada';
@@ -274,7 +310,9 @@ function completedActivityButton(siteId, activityId) {
 }
 
 function renderHours() {
-  const s = site(), rows = state.hoursSite.filter(x => x.site_id === s.id).sort((a, b) => b.record_date.localeCompare(a.record_date));
+  const s = site();
+  if (!s) { $('hoursTable').innerHTML = '<tr><td colspan="9" class="empty">Todavía no tienes ninguna empresa registrada.</td></tr>'; return; }
+  const rows = state.hoursSite.filter(x => x.site_id === s.id).sort((a, b) => b.record_date.localeCompare(a.record_date));
   $('hoursTable').innerHTML = rows.length ? rows.map(x => {
     const closed = monthClosed(s.id, monthOf(x.record_date));
     const editBtn = closed
@@ -407,6 +445,7 @@ function refreshHourTaskOptions() {
 // null = registrar horas nuevas; con id = editando un registro ya existente.
 let editingHourId = null;
 function openHoursModal() {
+  if (!company() || !site()) return toast('Primero agrega una empresa y una sede desde Configuración.');
   editingHourId = null;
   $('hoursModalTitle').textContent = 'Registrar horas';
   $('hRate').disabled = true;
@@ -499,6 +538,7 @@ function firstOpenActivity(siteId) {
   return open ? open.id : (acts[0]?.id || null);
 }
 function openActivityModal(taskId) {
+  if (!company() || !site()) return toast('Primero agrega una empresa y una sede desde Configuración.');
   $('aCompany').innerHTML = options(state.companies); $('aCompany').value = company().id;
   fillSiteSelect('aCompany', 'aSite'); $('aSite').value = site().id;
   const s = site();
@@ -580,7 +620,7 @@ function refreshEvidenceTaskOptions() {
   const s = state.companies.find(x => x.id === $('eCompany').value)?.sites.find(x => x.id === $('eSite').value);
   $('eTask').innerHTML = options(s ? activitiesForSite(s.id) : state.activities);
 }
-function openEvidenceModal() { fillCommon('eCompany', 'eSite', 'eTask'); $('eCompany').value = company().id; fillSiteSelect('eCompany', 'eSite'); $('eSite').value = site().id; refreshEvidenceTaskOptions(); $('eDate').value = today(); $('eLink').value = ''; $('eDesc').value = ''; $('eFile').value = ''; openModal('evidenceModal'); }
+function openEvidenceModal() { if (!company() || !site()) return toast('Primero agrega una empresa y una sede desde Configuración.'); fillCommon('eCompany', 'eSite', 'eTask'); $('eCompany').value = company().id; fillSiteSelect('eCompany', 'eSite'); $('eSite').value = site().id; refreshEvidenceTaskOptions(); $('eDate').value = today(); $('eLink').value = ''; $('eDesc').value = ''; $('eFile').value = ''; openModal('evidenceModal'); }
 $('eCompany')?.addEventListener('change', () => { fillSiteSelect('eCompany', 'eSite'); refreshEvidenceTaskOptions(); });
 $('eSite')?.addEventListener('change', refreshEvidenceTaskOptions);
 async function saveEvidence() {
