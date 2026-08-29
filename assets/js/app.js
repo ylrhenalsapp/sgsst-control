@@ -41,9 +41,16 @@ let state = {
   evidencesSite: [],
   calendarSite: [],
   statusMap: {},   // `${siteId}|${activityId}` -> 'Pendiente'|'En proceso'|'Completada'
+  targetsMap: {},  // `${siteId}|${activityId}` -> target_hours (solo si hay meta configurada)
   bag: { assigned: 0, additional: 0, carry: 0, total: 0, used: 0, remaining: 0 },
   bagExists: false,
 };
+
+// Iconos y colores decorativos por actividad (solo visual, no afecta datos)
+const ACT_ICONS = ['📋', '🎓', '📈', '🔧', '🔍', '📝', '📌', '⚙️'];
+const ACT_COLORS = ['iconBlue', 'iconGreen', 'iconPurple', 'iconOrange', 'iconTeal'];
+function actIcon(i) { return ACT_ICONS[i % ACT_ICONS.length]; }
+function actColor(i) { return ACT_COLORS[i % ACT_COLORS.length]; }
 
 function company() { return state.companies.find(c => c.id === $('filterCompany').value) || state.companies[0]; }
 function site() { const c = company(); return c?.sites.find(s => s.id === $('filterSite').value) || c?.sites[0]; }
@@ -87,18 +94,21 @@ async function refreshAll() {
   const s = site();
   if (!s) return;
 
-  const [{ data: hours }, { data: evid }, { data: cal }, { data: statusRows }, { data: bagRow }] = await Promise.all([
+  const [{ data: hours }, { data: evid }, { data: cal }, { data: statusRows }, { data: bagRow }, { data: targetRows }] = await Promise.all([
     sb.from('hour_records').select('*').eq('site_id', s.id),
     sb.from('evidences').select('*').eq('site_id', s.id).order('record_date', { ascending: false }),
     sb.from('schedule_events').select('*').eq('site_id', s.id),
     sb.from('v_activity_current_status').select('*').eq('site_id', s.id),
     sb.rpc('get_bag_summary', { p_site_id: s.id, p_month: `${selectedMonth()}-01` }),
+    sb.from('activity_targets').select('activity_id,target_hours').eq('site_id', s.id),
   ]);
   state.hoursSite = hours || [];
   state.evidencesSite = evid || [];
   state.calendarSite = cal || [];
   state.statusMap = {};
   (statusRows || []).forEach(r => { state.statusMap[`${r.site_id}|${r.activity_id}`] = r.status; });
+  state.targetsMap = {};
+  (targetRows || []).forEach(r => { state.targetsMap[`${s.id}|${r.activity_id}`] = Number(r.target_hours); });
   state.bag = (bagRow && bagRow[0]) || { assigned: 0, additional: 0, carry: 0, total: 0, used: 0, remaining: 0 };
 
   const { count } = await sb.from('monthly_bags').select('id', { count: 'exact', head: true }).eq('site_id', s.id).eq('month', `${selectedMonth()}-01`);
@@ -111,7 +121,16 @@ async function refreshAll() {
   renderEvidences();
   renderConfig();
   renderCalendar();
+  renderNotifBell();
   if (typeof renderFullCalendar === 'function') renderFullCalendar();
+}
+
+function activityTarget(siteId, activityId) { return state.targetsMap[`${siteId}|${activityId}`] || null; }
+function activityProgressBar(siteId, activityId, totalH) {
+  const target = activityTarget(siteId, activityId);
+  if (!target) return '';
+  const pct = Math.min(100, Math.round((totalH / target) * 100));
+  return `<div class="progressRow"><div class="bar"><div class="fill" style="width:${pct}%"></div></div><span class="pct">${pct}%</span></div>`;
 }
 
 function filteredHours() { const s = site(), m = selectedMonth(); return state.hoursSite.filter(x => x.site_id === s.id && monthOf(x.record_date) === m); }
@@ -140,15 +159,20 @@ function renderDashboard() {
   document.querySelector('#mAssigned').parentElement.querySelector('.sub').textContent = `Asignadas: ${bag.assigned} h · Saldo anterior: ${bag.carry} h · Adicionales: ${bag.additional} h`;
   document.querySelector('#mRemaining').parentElement.querySelector('.sub').textContent = `Disponible para ${m}`;
 
-  $('dashboardActivities').innerHTML = state.activities.map(t => {
+  $('dashboardActivities').innerHTML = state.activities.map((t, i) => {
     const status = taskStatus(s.id, t.id), completed = status === 'Completada';
     const totalH = taskHours(s.id, t.id), monthH = taskMonthHours(s.id, t.id, m);
     const btn = completed
       ? `<button class="secondary" disabled style="opacity:.55;cursor:not-allowed">✓ Completada</button>`
       : `<button class="secondary" data-requires-write onclick="openActivityModal('${t.id}')">Registrar horas / actualizar</button>`;
     return `<div class="activity">
-      <div class="activityTop"><div><h3>${t.name}</h3><div class="small">${completed ? 'Actividad cerrada. No admite más horas ni nuevos registros.' : 'Actividad abierta para registrar horas en diferentes días.'}</div></div><span class="badge ${completed ? 'done' : status === 'En proceso' ? 'progress' : 'pending'}">${status}</span></div>
+      <div class="activityTop">
+        <div class="activityIcon ${actColor(i)}">${actIcon(i)}</div>
+        <div><h3>${t.name}</h3><div class="small">${completed ? 'Actividad cerrada. No admite más horas ni nuevos registros.' : 'Actividad abierta para registrar horas en diferentes días.'}</div></div>
+        <span class="badge ${completed ? 'done' : status === 'En proceso' ? 'progress' : 'pending'}">${status}</span>
+      </div>
       <div class="small" style="margin-top:8px"><b>${totalH} h acumuladas</b> · ${monthH} h en ${m}${completed ? ' · Actividad completada' : ''}</div>
+      ${activityProgressBar(s.id, t.id, totalH)}
       <div style="margin-top:10px">${btn}</div>
     </div>`;
   }).join('');
@@ -159,13 +183,17 @@ function renderDashboard() {
 
 function renderActivities() {
   const s = site(), m = selectedMonth();
-  $('activitiesList').innerHTML = state.activities.map(t => {
+  $('activitiesList').innerHTML = state.activities.map((t, i) => {
     const status = taskStatus(s.id, t.id), completed = status === 'Completada';
     const totalH = taskHours(s.id, t.id), monthH = taskMonthHours(s.id, t.id, m);
     return `<div class="activity">
-      <div class="activityTop"><div><h3>${t.name}</h3><div class="small">${completed ? 'Actividad completada y bloqueada para nuevos registros.' : 'Sin cierre todavía.'}</div></div>
-      <div>${completed ? '<span class="badge done">Completada</span>' : `<button class="secondary" data-requires-write onclick="openActivityModal('${t.id}')">Registrar horas</button>`}</div></div>
+      <div class="activityTop">
+        <div class="activityIcon ${actColor(i)}">${actIcon(i)}</div>
+        <div><h3>${t.name}</h3><div class="small">${completed ? 'Actividad completada y bloqueada para nuevos registros.' : 'Sin cierre todavía.'}</div></div>
+        <div>${completed ? '<span class="badge done">Completada</span>' : `<button class="secondary" data-requires-write onclick="openActivityModal('${t.id}')">Registrar horas</button>`}</div>
+      </div>
       <div class="small" style="margin:8px 0"><b>${totalH} h acumuladas</b> · ${monthH} h en el mes seleccionado</div>
+      ${activityProgressBar(s.id, t.id, totalH)}
       <span class="badge ${completed ? 'done' : status === 'En proceso' ? 'progress' : 'pending'}">${status}</span>
     </div>`;
   }).join('');
@@ -173,7 +201,34 @@ function renderActivities() {
 
 function renderHours() {
   const s = site(), rows = state.hoursSite.filter(x => x.site_id === s.id).sort((a, b) => b.record_date.localeCompare(a.record_date));
-  $('hoursTable').innerHTML = rows.length ? rows.map(x => `<tr><td>${x.record_date}</td><td>${company().name}<br><span class="small">${s.name}</span></td><td>${taskName(x.activity_id)}</td><td><span class="badge ${x.status === 'Completado' ? 'done' : 'progress'}">${x.status}</span></td><td>${x.hours}</td><td>${money(x.rate)}</td><td>${money(x.hours * x.rate)}</td><td><button class="danger" data-requires-write onclick="deleteItem('hour_records','${x.id}')">Eliminar</button></td></tr>`).join('') : `<tr><td colspan="8" class="empty">No hay horas registradas.</td></tr>`;
+  $('hoursTable').innerHTML = rows.length ? rows.map(x => `<tr><td>${x.record_date}</td><td>${company().name}<br><span class="small">${s.name}</span></td><td>${taskName(x.activity_id)}</td><td><span class="badge ${x.status === 'Completado' ? 'done' : 'progress'}">${x.status}</span></td><td>${x.hours}</td><td>${money(x.rate)}</td><td>${money(x.hours * x.rate)}</td><td><button class="badge ${x.paid ? 'paid' : 'unpaid'}" data-requires-write onclick="togglePaid('${x.id}',${!x.paid})">${x.paid ? '✓ Pagado' : '⏳ Pendiente'}</button></td><td><button class="danger" data-requires-write onclick="deleteItem('hour_records','${x.id}')">Eliminar</button></td></tr>`).join('') : `<tr><td colspan="9" class="empty">No hay horas registradas.</td></tr>`;
+}
+
+async function togglePaid(id, value) {
+  const { error } = await sb.from('hour_records').update({ paid: value }).eq('id', id);
+  if (error) return toast('No se pudo actualizar el pago: ' + error.message);
+  await refreshAll();
+  toast(value ? '✓ Registro marcado como pagado.' : 'Registro marcado como pendiente de pago.');
+}
+
+// ---------------------------------------------------------------------------
+// Campana de notificaciones (resumen de actividades pendientes y últimos registros)
+// ---------------------------------------------------------------------------
+function renderNotifBell() {
+  const s = site(); if (!s) return;
+  const pendingCount = state.activities.filter(t => !taskIsCompleted(s.id, t.id)).length;
+  const countEl = $('notifCount');
+  if (countEl) {
+    if (pendingCount > 0) { countEl.style.display = 'inline-flex'; countEl.textContent = pendingCount; }
+    else countEl.style.display = 'none';
+  }
+  const recent = [...state.hoursSite].sort((a, b) => b.record_date.localeCompare(a.record_date)).slice(0, 4);
+  const panel = $('notifPanel');
+  if (panel) {
+    panel.innerHTML = `<div class="notifTitle">📋 Actividades pendientes: ${pendingCount}</div>` +
+      (recent.length ? recent.map(x => `<div class="notifItem"><b>${taskName(x.activity_id)}</b><br><span class="small">${x.record_date} · ${x.hours} h · ${x.paid ? 'Pagado' : 'Pendiente de pago'}</span></div>`).join('')
+        : '<div class="notifItem small">Sin registros recientes.</div>');
+  }
 }
 
 function renderEvidences() {
@@ -253,18 +308,64 @@ async function updateActivityBagInfo() {
   const b = (data && data[0]) || { remaining: 0 };
   $('aBagInfo').innerHTML = `<b>Bolsa disponible:</b> ${b.remaining} h para ${m}. Las horas registradas en este avance se descuentan directamente de esta bolsa.`;
 }
+// Opciones del select de actividad: cada actividad completada queda deshabilitada
+// (visible mas no seleccionable), en vez de bloquear todo el modal por una sola.
+function activityTaskOptions(siteId, selectedId) {
+  return state.activities.map(t => {
+    const completed = taskIsCompleted(siteId, t.id);
+    const sel = t.id === selectedId ? 'selected' : '';
+    return `<option value="${t.id}" ${completed ? 'disabled' : ''} ${sel}>${t.name}${completed ? ' — COMPLETADA' : ''}</option>`;
+  }).join('');
+}
+// Primera actividad NO completada de la sede (o la primera de todas si están todas completadas).
+function firstOpenActivity(siteId) {
+  const open = state.activities.find(t => !taskIsCompleted(siteId, t.id));
+  return open ? open.id : (state.activities[0]?.id || null);
+}
 function openActivityModal(taskId) {
-  fillCommon('aCompany', 'aSite', 'aTask'); $('aCompany').value = company().id; fillSiteSelect('aCompany', 'aSite'); $('aSite').value = site().id;
-  if (taskId) $('aTask').value = taskId;
-  const s = site(), tid = $('aTask').value;
-  if (taskIsCompleted(s.id, tid)) { toast('Esta actividad ya está completada y está bloqueada.'); return; }
+  $('aCompany').innerHTML = options(state.companies); $('aCompany').value = company().id;
+  fillSiteSelect('aCompany', 'aSite'); $('aSite').value = site().id;
+  const s = site();
+  if (!s) return;
+  if (state.activities.every(t => taskIsCompleted(s.id, t.id))) { toast('Todas las actividades de esta sede ya están completadas.'); return; }
+  const chosen = taskId || firstOpenActivity(s.id);
+  $('aTask').innerHTML = activityTaskOptions(s.id, chosen);
+  $('aTask').value = chosen;
+  refreshActivityModalState();
+  openModal('activityModal');
+}
+// Se ejecuta cada vez que cambia la actividad elegida en el modal: actualiza
+// el estado propuesto y la bolsa disponible SIN cerrar el modal (antes solo
+// se validaba una vez al abrir, usando siempre la primera actividad del
+// catálogo — si esa venía completada, el botón "+ Registrar avance" no hacía
+// nada visible).
+function refreshActivityModalState() {
+  const s = state.companies.find(x => x.id === $('aCompany').value)?.sites.find(x => x.id === $('aSite').value);
+  const tid = $('aTask').value;
+  if (!s || !tid) return;
   $('aStatus').value = taskStatus(s.id, tid) === 'Pendiente' ? 'Pendiente' : 'En proceso';
   $('aHours').value = 0; $('aNotes').value = '';
   updateActivityBagInfo();
-  openModal('activityModal');
 }
-$('aCompany')?.addEventListener('change', () => { fillSiteSelect('aCompany', 'aSite'); updateActivityBagInfo(); });
-$('aSite')?.addEventListener('change', updateActivityBagInfo);
+function refreshActivityCompanySite() {
+  fillSiteSelect('aCompany', 'aSite');
+  const s = state.companies.find(x => x.id === $('aCompany').value)?.sites.find(x => x.id === $('aSite').value);
+  if (!s) return;
+  const chosen = firstOpenActivity(s.id);
+  $('aTask').innerHTML = activityTaskOptions(s.id, chosen);
+  $('aTask').value = chosen;
+  refreshActivityModalState();
+}
+$('aCompany')?.addEventListener('change', refreshActivityCompanySite);
+$('aSite')?.addEventListener('change', () => {
+  const s = state.companies.find(x => x.id === $('aCompany').value)?.sites.find(x => x.id === $('aSite').value);
+  if (!s) return;
+  const chosen = firstOpenActivity(s.id);
+  $('aTask').innerHTML = activityTaskOptions(s.id, chosen);
+  $('aTask').value = chosen;
+  refreshActivityModalState();
+});
+$('aTask')?.addEventListener('change', refreshActivityModalState);
 
 async function saveActivity() {
   const c = state.companies.find(x => x.id === $('aCompany').value), s = c?.sites.find(x => x.id === $('aSite').value), tid = $('aTask').value;
@@ -413,4 +514,8 @@ function toggleMobileMenu(force) {
   $('sidebarBackdrop').style.display = open ? 'block' : 'none';
 }
 const originalShowSection = showSection;
-showSection = function (id, el) { originalShowSection(id, el); if (window.innerWidth <= 900) toggleMobileMenu(false); };
+showSection = function (id, el) {
+  originalShowSection(id, el);
+  document.querySelectorAll('.mtab').forEach(a => a.classList.toggle('active', a.dataset.tab === id));
+  if (window.innerWidth <= 900) toggleMobileMenu(false);
+};

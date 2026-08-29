@@ -27,19 +27,23 @@
   </div>
 </div>
 <div id="userTop" class="userTop" style="display:none">
-  <div style="display:flex;align-items:center;gap:10px">
+  <div class="topbarLeft">
     <button class="mobileMenuBtn" onclick="toggleMobileMenu()">☰</button>
-    <div class="userIdentity">
-      <div class="userAvatar">YL</div>
-      <div style="min-width:0">
-        <div class="userName">Ingresó: Yasbleidis López Rhenals</div>
-        <div class="userRole">Fisioterapeuta · Especialista en Gerencia de la Seguridad y Salud en el Trabajo</div>
+    <div class="topbarLogo"><img src="assets/img/logo-sst-header.png" alt="SST Asesorías y consultorías"></div>
+  </div>
+  <div class="topbarRight">
+    <div class="notifWrap">
+      <button class="notifBell" onclick="toggleNotifPanel()" title="Notificaciones">🔔<span class="notifCount" id="notifCount" style="display:none">0</span></button>
+      <div id="notifPanel" class="notifPanel"></div>
+    </div>
+    <div class="userAvatarWrap" onclick="toggleUserMenu()" title="Cuenta">
+      <div class="userAvatar" id="topAvatar">YL</div><span class="avatarDot"></span>
+      <div id="userMenuPanel" class="userMenuPanel">
+        <div class="userName" id="menuUserName">Usuario</div>
+        <div class="userRole" id="menuUserRole"></div>
+        <button class="secondary" style="width:100%;margin-top:10px" onclick="logout()">Cerrar sesión</button>
       </div>
     </div>
-  </div>
-  <div style="display:flex;align-items:center;gap:10px">
-    <div class="userLoginBadge">✓ Sesión activa</div>
-    <button class="secondary" onclick="logout()">Cerrar sesión</button>
   </div>
 </div>
 
@@ -70,20 +74,27 @@
 <div class="top">
   <div><h1 id="pageTitle">Dashboard</h1><p>Control operativo del proyecto y seguimiento por empresa, sede y periodo.</p></div>
   <div class="filters">
-    <select id="filterCompany" onchange="refreshAll()"></select>
-    <select id="filterSite" onchange="refreshAll()"></select>
-    <input id="filterMonth" type="month" onchange="refreshAll()">
+    <div class="filterChip"><span>🏢</span><select id="filterCompany" onchange="refreshAll()"></select></div>
+    <div class="filterChip"><span>📍</span><select id="filterSite" onchange="refreshAll()"></select></div>
+    <div class="filterChip"><span>📅</span><input id="filterMonth" type="month" onchange="refreshAll()"></div>
   </div>
 </div>
 
 <div id="bagAlertBanner" class="conflictBox conflictBad" style="display:none;margin-bottom:16px"></div>
 
 <section id="dashboard" class="section active">
+<div class="welcomeCard">
+  <div class="welcomeLeft">
+    <div class="userAvatar big" id="welcomeAvatar">YL</div>
+    <div><div class="welcomeHi">¡Hola, <span id="welcomeName">Usuario</span>!</div><div class="welcomeRole" id="welcomeRole"></div></div>
+  </div>
+  <div class="userLoginBadge">✓ Sesión activa</div>
+</div>
 <div class="grid4">
-  <div class="card metric"><div class="label">Horas asignadas</div><div class="value" id="mAssigned">0</div><div class="sub">Bolsa de horas de la sede</div></div>
-  <div class="card metric"><div class="label">Horas ejecutadas</div><div class="value" id="mUsed">0</div><div class="sub">Según registros del periodo</div></div>
-  <div class="card metric"><div class="label">Horas disponibles</div><div class="value" id="mRemaining">0</div><div class="sub">Saldo de la bolsa</div></div>
-  <div class="card metric"><div class="label">Valor ejecutado</div><div class="value" id="mValue">$0</div><div class="sub">Tarifa vigente por hora</div></div>
+  <div class="card metric"><div class="metricIcon iconBlue">⏱️</div><div class="label">Horas asignadas</div><div class="value" id="mAssigned">0</div><div class="sub">Bolsa de horas de la sede</div></div>
+  <div class="card metric"><div class="metricIcon iconGreen">✅</div><div class="label">Horas ejecutadas</div><div class="value" id="mUsed">0</div><div class="sub">Según registros del periodo</div></div>
+  <div class="card metric"><div class="metricIcon iconPurple">🗓️</div><div class="label">Horas disponibles</div><div class="value" id="mRemaining">0</div><div class="sub">Saldo de la bolsa</div></div>
+  <div class="card metric"><div class="metricIcon iconOrange">💲</div><div class="label">Valor ejecutado</div><div class="value" id="mValue">$0</div><div class="sub">Tarifa vigente por hora</div></div>
 </div>
 <div class="grid2" style="margin-top:18px">
  <div class="panel"><div class="panelhead"><h2>Las 5 actividades del proyecto</h2><button class="primary" data-requires-write onclick="openActivityModal()">+ Registrar avance</button></div><div id="dashboardActivities"></div></div>
@@ -104,7 +115,7 @@
 </section>
 
 <section id="horas" class="section">
-<div class="panel"><div class="panelhead"><h2>Registro de horas</h2><button class="primary" data-requires-write onclick="openHoursModal()">+ Registrar horas</button></div><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Empresa / Sede</th><th>Actividad</th><th>Estado</th><th>Horas</th><th>Tarifa</th><th>Valor</th><th>Acción</th></tr></thead><tbody id="hoursTable"></tbody></table></div></div>
+<div class="panel"><div class="panelhead"><h2>Registro de horas</h2><button class="primary" data-requires-write onclick="openHoursModal()">+ Registrar horas</button></div><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Empresa / Sede</th><th>Actividad</th><th>Estado</th><th>Horas</th><th>Tarifa</th><th>Valor</th><th>Pago</th><th>Acción</th></tr></thead><tbody id="hoursTable"></tbody></table></div></div>
 </section>
 
 <section id="evidencias" class="section">
@@ -162,6 +173,14 @@
 </div>
 </section>
 </main></div>
+
+<nav class="mobileTabBar" id="mobileTabBar">
+  <a data-tab="dashboard" class="mtab active" onclick="showSection('dashboard',document.querySelector('.nav a[href=&quot;#dashboard&quot;]'))"><span class="mtabIcon">🏠</span>Dashboard</a>
+  <a data-tab="actividades" class="mtab" onclick="showSection('actividades',document.querySelector('.nav a[href=&quot;#actividades&quot;]'))"><span class="mtabIcon">📋</span>Actividades</a>
+  <a data-tab="horas" class="mtab" onclick="showSection('horas',document.querySelector('.nav a[href=&quot;#horas&quot;]'))"><span class="mtabIcon">⏱️</span>Registro horas</a>
+  <a data-tab="calendario" class="mtab" onclick="showSection('calendario',document.querySelector('.nav a[href=&quot;#calendario&quot;]'));renderCalendar()"><span class="mtabIcon">🗓️</span>Calendario</a>
+  <a class="mtab" onclick="toggleMobileMenu()"><span class="mtabIcon">⋯</span>Más</a>
+</nav>
 
 <div class="modal" id="hoursModal"><div class="modalbox"><h2>Registrar horas</h2>
 <div class="formgrid">
