@@ -494,3 +494,7 @@ select{accent-color:var(--navy);cursor:pointer}
 .tourNavBtns{display:flex;gap:8px}
 .tourNavBtns button{width:auto}
 @media (max-width:640px){.tourTooltip{left:16px!important;right:16px;width:auto}}
+/* La barra de avance también se usa dentro de una celda de tabla angosta
+   (Registro de horas); sin un mínimo, flex:1 la deja casi invisible. */
+.progressRow .bar{min-width:60px}
+.wizActivityRow input[type=number]{width:78px;flex:0 0 auto}

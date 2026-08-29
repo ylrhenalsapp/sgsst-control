@@ -212,7 +212,11 @@ function renderMiniCalendar() {
 function activityTarget(siteId, activityId) { return state.targetsMap[`${siteId}|${activityId}`] || null; }
 function activityProgressBar(siteId, activityId, totalH) {
   const target = activityTarget(siteId, activityId);
-  if (!target) return '';
+  // Sin una meta de horas configurada no hay contra qué calcular un %; se
+  // avisa explícitamente en vez de dejar el espacio vacío (antes parecía
+  // que el porcentaje simplemente no existía). La meta se define desde
+  // Configuración → Sedes y horas → "Actividades".
+  if (!target) return '<span class="small">Sin meta de horas definida</span>';
   const pct = Math.min(100, Math.round((totalH / target) * 100));
   return `<div class="progressRow"><div class="bar"><div class="fill" style="width:${pct}%"></div></div><span class="pct">${pct}%</span></div>`;
 }
@@ -311,15 +315,20 @@ function completedActivityButton(siteId, activityId) {
 
 function renderHours() {
   const s = site();
-  if (!s) { $('hoursTable').innerHTML = '<tr><td colspan="9" class="empty">Todavía no tienes ninguna empresa registrada.</td></tr>'; return; }
+  if (!s) { $('hoursTable').innerHTML = '<tr><td colspan="10" class="empty">Todavía no tienes ninguna empresa registrada.</td></tr>'; return; }
   const rows = state.hoursSite.filter(x => x.site_id === s.id).sort((a, b) => b.record_date.localeCompare(a.record_date));
   $('hoursTable').innerHTML = rows.length ? rows.map(x => {
     const closed = monthClosed(s.id, monthOf(x.record_date));
     const editBtn = closed
       ? `<span class="small" title="El mes de este registro ya está cerrado">🔒 Cerrado</span>`
       : `<button class="secondary" data-requires-write onclick="editHours('${x.id}')">Editar</button>`;
-    return `<tr><td>${x.record_date}</td><td>${company().name}<br><span class="small">${s.name}</span></td><td>${taskName(x.activity_id)}</td><td><span class="badge ${x.status === 'Completado' ? 'done' : 'progress'}">${x.status}</span></td><td>${x.hours}</td><td>${money(x.rate)}</td><td>${money(x.hours * x.rate)}</td><td><button class="badge ${x.paid ? 'paid' : 'unpaid'}" data-requires-write onclick="togglePaid('${x.id}',${!x.paid})">${x.paid ? '✓ Pagado' : '⏳ Pendiente'}</button></td><td style="white-space:nowrap">${editBtn} <button class="danger" data-requires-write onclick="deleteItem('hour_records','${x.id}')">Eliminar</button></td></tr>`;
-  }).join('') : `<tr><td colspan="9" class="empty">No hay horas registradas.</td></tr>`;
+    // El % de avance es de la ACTIVIDAD completa en esta sede (horas
+    // acumuladas de todos sus registros / meta configurada), no solo de
+    // este registro puntual — por eso se repite en cada fila de la misma
+    // actividad, igual que en Dashboard y Actividades.
+    const avance = activityProgressBar(s.id, x.activity_id, taskHours(s.id, x.activity_id));
+    return `<tr><td>${x.record_date}</td><td>${company().name}<br><span class="small">${s.name}</span></td><td>${taskName(x.activity_id)}</td><td>${avance}</td><td><span class="badge ${x.status === 'Completado' ? 'done' : 'progress'}">${x.status}</span></td><td>${x.hours}</td><td>${money(x.rate)}</td><td>${money(x.hours * x.rate)}</td><td><button class="badge ${x.paid ? 'paid' : 'unpaid'}" data-requires-write onclick="togglePaid('${x.id}',${!x.paid})">${x.paid ? '✓ Pagado' : '⏳ Pendiente'}</button></td><td style="white-space:nowrap">${editBtn} <button class="danger" data-requires-write onclick="deleteItem('hour_records','${x.id}')">Eliminar</button></td></tr>`;
+  }).join('') : `<tr><td colspan="10" class="empty">No hay horas registradas.</td></tr>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -848,6 +857,11 @@ async function wizardSave() {
 let saSiteId = null, saCompanyId = null;
 let saSelectedActivityIds = new Set();
 let saNewActivities = [];
+// Meta de horas por actividad PARA ESTA SEDE en particular (activityId ->
+// número de horas u "" si no aplica). Una misma actividad del catálogo
+// puede estar en varias sedes de la misma empresa, cada una con su propia
+// meta y su propio avance — nunca es un valor global de la actividad.
+let saTargetHours = {};
 
 function openSiteActivitiesModal(cid, sid) {
   const c = state.companies.find(x => x.id === cid), s = c?.sites.find(x => x.id === sid);
@@ -855,6 +869,8 @@ function openSiteActivitiesModal(cid, sid) {
   saCompanyId = cid; saSiteId = sid;
   saSelectedActivityIds = new Set(state.siteActivities.filter(sa => sa.site_id === sid).map(sa => sa.activity_id));
   saNewActivities = [];
+  saTargetHours = {};
+  state.activities.forEach(a => { const t = activityTarget(sid, a.id); if (t) saTargetHours[a.id] = t; });
   $('saSiteLabel').textContent = `${c.name} — ${s.name}`;
   $('saNewActivityName').value = '';
   renderSiteActivitiesEditor();
@@ -864,20 +880,26 @@ function openSiteActivitiesModal(cid, sid) {
 function renderSiteActivitiesEditor() {
   const existing = state.activities.map(a => {
     const hrs = taskHours(saSiteId, a.id);
+    const checked = saSelectedActivityIds.has(a.id);
     return `<label class="wizActivityRow">
-      <input type="checkbox" value="${a.id}" ${saSelectedActivityIds.has(a.id) ? 'checked' : ''} onchange="saToggleActivity('${a.id}', this.checked)">
-      ${a.name}${hrs > 0 ? `<span class="small" style="margin-left:6px">(${hrs} h registradas)</span>` : ''}
+      <input type="checkbox" value="${a.id}" ${checked ? 'checked' : ''} onchange="saToggleActivity('${a.id}', this.checked)">
+      <span style="flex:1">${a.name}${hrs > 0 ? `<span class="small" style="margin-left:6px">(${hrs} h registradas)</span>` : ''}</span>
+      <input type="number" min="0" step="0.5" value="${saTargetHours[a.id] || ''}" placeholder="Meta h" title="Meta de horas para esta actividad EN ESTA SEDE (opcional). Sirve para calcular el % de avance en el Dashboard, Actividades y Registro de horas. Otras sedes con la misma actividad tienen su propia meta independiente." style="width:78px" onchange="saSetTargetHours('${a.id}', this.value)">
     </label>`;
   }).join('');
   const fresh = saNewActivities.map((name, i) => `
     <label class="wizActivityRow wizActivityNew">
-      <input type="checkbox" checked disabled> ${name} <span class="small">(nueva)</span>
+      <input type="checkbox" checked disabled> <span style="flex:1">${name} <span class="small">(nueva)</span></span>
       <button type="button" class="linklike" onclick="saRemoveNewActivity(${i})">quitar</button>
     </label>`).join('');
   $('saActivitiesList').innerHTML = existing + fresh || '<p class="small">Todavía no hay actividades en el catálogo. Escribe una abajo para crearla.</p>';
 }
 
 function saToggleActivity(id, checked) { checked ? saSelectedActivityIds.add(id) : saSelectedActivityIds.delete(id); }
+function saSetTargetHours(id, value) {
+  const n = Number(value);
+  if (value === '' || !(n > 0)) delete saTargetHours[id]; else saTargetHours[id] = n;
+}
 
 function saAddNewActivity() {
   const n = $('saNewActivityName').value.trim();
@@ -920,11 +942,36 @@ async function saveSiteActivities() {
       if (error) return toast('No se pudo quitar alguna actividad: ' + error.message);
     }
 
+    // Metas de horas: solo para las actividades que quedan activas en esta
+    // sede. Cada meta es exclusiva de (sede, actividad) — no afecta a otras
+    // sedes que compartan la misma actividad del catálogo.
+    for (const activityId of finalIds) {
+      await saveActivityTarget(saSiteId, activityId, saTargetHours[activityId] || 0);
+    }
+
     closeModal('siteActivitiesModal');
     await init();
     toast('Actividades de la sede actualizadas.');
   } finally {
     btn.disabled = false; btn.textContent = originalText;
+  }
+}
+
+// Crea, actualiza o borra la meta de horas de una actividad para UNA sede
+// puntual (site_id + activity_id). No usa upsert con onConflict porque no
+// se puede asumir que exista una restricción única en la tabla; en vez de
+// eso, se busca el registro exacto de esta combinación y se actualiza o se
+// crea según corresponda. hours <= 0 borra la meta (vuelve a "sin meta").
+async function saveActivityTarget(siteId, activityId, hours) {
+  const { data: existing } = await sb.from('activity_targets').select('id').eq('site_id', siteId).eq('activity_id', activityId).maybeSingle();
+  if (!(hours > 0)) {
+    if (existing) await sb.from('activity_targets').delete().eq('id', existing.id);
+    return;
+  }
+  if (existing) {
+    await sb.from('activity_targets').update({ target_hours: hours }).eq('id', existing.id);
+  } else {
+    await sb.from('activity_targets').insert({ site_id: siteId, activity_id: activityId, target_hours: hours });
   }
 }
 
