@@ -480,3 +480,17 @@ select{accent-color:var(--navy);cursor:pointer}
 .monthCloseBanner button{width:auto;white-space:nowrap;margin-left:auto}
 .monthCloseBanner.openBanner{background:#fff6db;border:1px solid #f0dfa0;color:#7a5c0a}
 .monthCloseBanner.closedBanner{background:#e9f8ef;border:1px solid #bfe6cf;color:#17733c}
+
+/* ============================================================================
+   V14: Editar actividades de sede (reutiliza estilos del wizard) + tour de
+   bienvenida con tooltips paso a paso.
+   ============================================================================ */
+.tourSpotlight{position:fixed;z-index:500;border-radius:12px;box-shadow:0 0 0 9999px rgba(10,20,30,.62);border:2px solid #fff;pointer-events:none;transition:top .25s ease,left .25s ease,width .25s ease,height .25s ease}
+.tourTooltip{position:fixed;z-index:501;width:320px;max-width:90vw;background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(10,20,30,.35);padding:16px;transition:top .25s ease,left .25s ease}
+.tourTooltipStep{font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);letter-spacing:.4px;margin-bottom:4px}
+.tourTooltip h3{margin:2px 0 8px;font-size:15px;color:var(--navy)}
+.tourTooltip p{margin:0 0 14px;font-size:13px;line-height:1.5;color:var(--ink)}
+.tourActions{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tourNavBtns{display:flex;gap:8px}
+.tourNavBtns button{width:auto}
+@media (max-width:640px){.tourTooltip{left:16px!important;right:16px;width:auto}}

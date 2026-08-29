@@ -72,6 +72,14 @@ function taskStatus(siteId, activityId) { return state.statusMap[`${siteId}|${ac
 function taskIsCompleted(siteId, activityId) { return taskStatus(siteId, activityId) === 'Completada'; }
 function taskHours(siteId, activityId) { return state.hoursSite.filter(h => h.site_id === siteId && h.activity_id === activityId).reduce((a, x) => a + Number(x.hours), 0); }
 function taskMonthHours(siteId, activityId, m) { return state.hoursSite.filter(h => h.site_id === siteId && h.activity_id === activityId && monthOf(h.record_date) === m).reduce((a, x) => a + Number(x.hours), 0); }
+// Registro de horas más reciente de una actividad (el que normalmente marcó
+// su cierre), usado para ofrecer "Editar horas" sobre actividades ya
+// completadas desde el Dashboard / Actividades.
+function latestHourRecordForActivity(siteId, activityId) {
+  const rows = state.hoursSite.filter(h => h.site_id === siteId && h.activity_id === activityId);
+  if (!rows.length) return null;
+  return [...rows].sort((a, b) => b.record_date.localeCompare(a.record_date) || String(b.id).localeCompare(String(a.id)))[0];
+}
 
 // ---------------------------------------------------------------------------
 // Carga inicial (catálogo) y refresco (datos operativos por filtro)
@@ -97,6 +105,7 @@ async function init() {
   refreshSitesFilter();
   if ($('reportMonth')) $('reportMonth').value = selectedMonth();
   await refreshAll();
+  if (typeof maybeShowWelcomeTour === 'function') maybeShowWelcomeTour();
 }
 
 function refreshSitesFilter() {
@@ -214,8 +223,7 @@ function renderDashboard() {
   $('dashboardActivities').innerHTML = dashActs.length ? dashActs.map((t, i) => {
     const status = taskStatus(s.id, t.id), completed = status === 'Completada';
     const totalH = taskHours(s.id, t.id), monthH = taskMonthHours(s.id, t.id, m);
-    const btn = completed
-      ? `<button class="secondary" disabled style="opacity:.55;cursor:not-allowed">✓ Completada</button>`
+    const btn = completed ? completedActivityButton(s.id, t.id)
       : `<button class="secondary" data-requires-write onclick="openActivityModal('${t.id}')">Registrar horas / actualizar</button>`;
     return `<div class="activity">
       <div class="activityTop">
@@ -242,14 +250,27 @@ function renderActivities() {
     return `<div class="activity">
       <div class="activityTop">
         <div class="activityIcon ${actColor(i)}">${actIcon(i)}</div>
-        <div><h3>${t.name}</h3><div class="small">${completed ? 'Actividad completada y bloqueada para nuevos registros.' : 'Sin cierre todavía.'}</div></div>
-        <div>${completed ? '<span class="badge done">Completada</span>' : `<button class="secondary" data-requires-write onclick="openActivityModal('${t.id}')">Registrar horas</button>`}</div>
+        <div><h3>${t.name}</h3><div class="small">${completed ? 'Actividad completada. Puedes corregir sus horas mientras el mes no esté cerrado.' : 'Sin cierre todavía.'}</div></div>
+        <div>${completed ? completedActivityButton(s.id, t.id) : `<button class="secondary" data-requires-write onclick="openActivityModal('${t.id}')">Registrar horas</button>`}</div>
       </div>
       <div class="small" style="margin:8px 0"><b>${totalH} h acumuladas</b> · ${monthH} h en el mes seleccionado</div>
       ${activityProgressBar(s.id, t.id, totalH)}
       <span class="badge ${completed ? 'done' : status === 'En proceso' ? 'progress' : 'pending'}">${status}</span>
     </div>`;
   }).join('') : '<p class="empty">Esta sede todavía no tiene actividades asignadas. Agrégalas desde Configuración → Actividades.</p>';
+}
+
+// Botón para una actividad ya "Completada": si tiene un registro de horas y
+// el mes de ese registro sigue abierto, deja editarlo (cambiar horas y
+// volver a guardar); si el mes ya está cerrado, se informa que está
+// bloqueada en vez de ofrecer un botón que fallaría al guardar.
+function completedActivityButton(siteId, activityId) {
+  const latest = latestHourRecordForActivity(siteId, activityId);
+  if (!latest) return `<button class="secondary" disabled style="opacity:.55;cursor:not-allowed">✓ Completada</button>`;
+  if (monthClosed(siteId, monthOf(latest.record_date))) {
+    return `<span class="badge done" title="El mes de este registro ya está cerrado">🔒 Completada (mes cerrado)</span>`;
+  }
+  return `<button class="secondary" data-requires-write onclick="editHours('${latest.id}')">✏️ Editar horas</button>`;
 }
 
 function renderHours() {
@@ -415,9 +436,14 @@ async function saveHours() {
   const h = Number($('hHours').value); if (!h || h <= 0) return toast('Ingresa una cantidad válida de horas');
   const c = state.companies.find(x => x.id === $('hCompany').value), s = c?.sites.find(x => x.id === $('hSite').value), taskId = $('hTask').value, m = monthOf($('hDate').value);
   if (!s) return toast('Selecciona una sede válida');
-  if (taskIsCompleted(s.id, taskId)) return toast('Esta actividad ya está completada y no admite más horas.');
-  if (monthClosed(s.id, m)) return toast('Ese mes ya está cerrado para esta sede. Reábrelo primero si necesitas cambiar algo.');
   const wasEditing = !!editingHourId;
+  // El bloqueo de "actividad completada" solo aplica a horas NUEVAS. Si ya
+  // existía el registro (se abrió con "Editar"), se debe poder corregir sus
+  // horas aunque la actividad haya quedado marcada como Completada — el
+  // único candado real para un registro existente es que el mes de esa
+  // fecha ya esté cerrado (chequeo siguiente).
+  if (!wasEditing && taskIsCompleted(s.id, taskId)) return toast('Esta actividad ya está completada y no admite más horas.');
+  if (monthClosed(s.id, m)) return toast('Ese mes ya está cerrado para esta sede. Reábrelo primero si necesitas cambiar algo.');
   const editingRecord = wasEditing ? state.hoursSite.find(x => x.id === editingHourId) : null;
   const oldHours = (editingRecord && editingRecord.site_id === s.id && monthOf(editingRecord.record_date) === m) ? Number(editingRecord.hours) : 0;
   const { data: bagData } = await sb.rpc('get_bag_summary', { p_site_id: s.id, p_month: `${m}-01` });
@@ -601,7 +627,7 @@ async function renderConfig() {
     for (const s of c.sites) {
       const { data } = await sb.rpc('get_bag_summary', { p_site_id: s.id, p_month: `${m}-01` });
       const b = (data && data[0]) || { assigned: 0, carry: 0, additional: 0, used: 0, remaining: 0 };
-      rows.push(`<tr><td>${c.name}</td><td>${s.name}</td><td>${b.assigned} h</td><td>${b.carry} h</td><td>${b.additional} h</td><td>${b.used} h</td><td><b>${b.remaining} h</b></td><td><button class="primary" data-requires-write onclick="openMonthlyBagModal('${c.id}','${s.id}','${m}')">Asignar</button> <button class="success" data-requires-write onclick="openAdditionalHoursModal('${c.id}','${s.id}','${m}')">+ Horas</button> <button class="danger" data-requires-write onclick="removeSite('${c.id}','${s.id}')">Eliminar</button></td></tr>`);
+      rows.push(`<tr><td>${c.name}</td><td>${s.name}</td><td>${b.assigned} h</td><td>${b.carry} h</td><td>${b.additional} h</td><td>${b.used} h</td><td><b>${b.remaining} h</b></td><td style="white-space:nowrap"><button class="primary" data-requires-write onclick="openMonthlyBagModal('${c.id}','${s.id}','${m}')">Asignar</button> <button class="success" data-requires-write onclick="openAdditionalHoursModal('${c.id}','${s.id}','${m}')">+ Horas</button> <button class="secondary" data-requires-write onclick="openSiteActivitiesModal('${c.id}','${s.id}')">Actividades</button> <button class="danger" data-requires-write onclick="removeSite('${c.id}','${s.id}')">Eliminar</button></td></tr>`);
     }
   }
   $('cfg-sites').innerHTML = `<div class="panelhead"><h2>Bolsas mensuales de horas</h2><div><button class="success" data-requires-write onclick="openMonthlyBagModal()">+ Asignar bolsa del mes</button> <button class="primary" data-requires-write onclick="openSiteWizard()">+ Agregar sede</button></div></div><p class="small">Periodo mostrado: <b>${m}</b>. El saldo no utilizado del mes anterior se suma automáticamente como saldo a favor.</p><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sede</th><th>Asignadas</th><th>Saldo anterior</th><th>Adicionales</th><th>Usadas</th><th>Disponibles</th><th>Acción</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
@@ -736,6 +762,95 @@ async function wizardSave() {
     closeModal('companyWizardModal');
     await init();
     toast('Listo: empresa, sede y actividades guardadas.');
+  } finally {
+    btn.disabled = false; btn.textContent = originalText;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Editar actividades de una sede ya existente: permite marcar/desmarcar
+// actividades del catálogo (o crear una nueva) sin tener que volver a pasar
+// por el wizard de creación. Las horas asignadas del mes se editan aparte,
+// con el botón "Asignar" que ya existe en esta misma tabla.
+// ---------------------------------------------------------------------------
+let saSiteId = null, saCompanyId = null;
+let saSelectedActivityIds = new Set();
+let saNewActivities = [];
+
+function openSiteActivitiesModal(cid, sid) {
+  const c = state.companies.find(x => x.id === cid), s = c?.sites.find(x => x.id === sid);
+  if (!c || !s) return toast('Selecciona una empresa y sede válida');
+  saCompanyId = cid; saSiteId = sid;
+  saSelectedActivityIds = new Set(state.siteActivities.filter(sa => sa.site_id === sid).map(sa => sa.activity_id));
+  saNewActivities = [];
+  $('saSiteLabel').textContent = `${c.name} — ${s.name}`;
+  $('saNewActivityName').value = '';
+  renderSiteActivitiesEditor();
+  openModal('siteActivitiesModal');
+}
+
+function renderSiteActivitiesEditor() {
+  const existing = state.activities.map(a => {
+    const hrs = taskHours(saSiteId, a.id);
+    return `<label class="wizActivityRow">
+      <input type="checkbox" value="${a.id}" ${saSelectedActivityIds.has(a.id) ? 'checked' : ''} onchange="saToggleActivity('${a.id}', this.checked)">
+      ${a.name}${hrs > 0 ? `<span class="small" style="margin-left:6px">(${hrs} h registradas)</span>` : ''}
+    </label>`;
+  }).join('');
+  const fresh = saNewActivities.map((name, i) => `
+    <label class="wizActivityRow wizActivityNew">
+      <input type="checkbox" checked disabled> ${name} <span class="small">(nueva)</span>
+      <button type="button" class="linklike" onclick="saRemoveNewActivity(${i})">quitar</button>
+    </label>`).join('');
+  $('saActivitiesList').innerHTML = existing + fresh || '<p class="small">Todavía no hay actividades en el catálogo. Escribe una abajo para crearla.</p>';
+}
+
+function saToggleActivity(id, checked) { checked ? saSelectedActivityIds.add(id) : saSelectedActivityIds.delete(id); }
+
+function saAddNewActivity() {
+  const n = $('saNewActivityName').value.trim();
+  if (!n) return toast('Escribe el nombre de la actividad');
+  saNewActivities.push(n);
+  $('saNewActivityName').value = '';
+  renderSiteActivitiesEditor();
+}
+function saRemoveNewActivity(i) { saNewActivities.splice(i, 1); renderSiteActivitiesEditor(); }
+
+async function saveSiteActivities() {
+  const btn = $('saSaveBtn'); btn.disabled = true; const originalText = btn.textContent; btn.textContent = 'Guardando…';
+  try {
+    const currentIds = new Set(state.siteActivities.filter(sa => sa.site_id === saSiteId).map(sa => sa.activity_id));
+    const finalIds = new Set(saSelectedActivityIds);
+
+    for (const name of saNewActivities) {
+      const { data: actData, error: actError } = await sb.from('activities').insert({ name, is_fixed: false }).select('id').single();
+      if (actError) { toast(`No se pudo crear la actividad "${name}": ${actError.message}`); continue; }
+      finalIds.add(actData.id);
+    }
+
+    const toAdd = [...finalIds].filter(id => !currentIds.has(id));
+    const toRemove = [...currentIds].filter(id => !finalIds.has(id));
+
+    const removingWithHours = toRemove.filter(id => taskHours(saSiteId, id) > 0);
+    if (removingWithHours.length) {
+      const names = removingWithHours.map(id => state.activities.find(a => a.id === id)?.name || 'Actividad').join(', ');
+      if (!confirm(`Vas a quitar de esta sede: ${names}. Ya tienen horas registradas — ese historial se conserva, pero la actividad dejará de aparecer en esta sede. ¿Continuar?`)) {
+        return;
+      }
+    }
+
+    if (toAdd.length) {
+      const { error } = await sb.from('site_activities').insert(toAdd.map(activity_id => ({ site_id: saSiteId, activity_id, created_by: currentProfile?.id })));
+      if (error) return toast('No se pudo agregar alguna actividad: ' + error.message);
+    }
+    if (toRemove.length) {
+      const { error } = await sb.from('site_activities').delete().eq('site_id', saSiteId).in('activity_id', toRemove);
+      if (error) return toast('No se pudo quitar alguna actividad: ' + error.message);
+    }
+
+    closeModal('siteActivitiesModal');
+    await init();
+    toast('Actividades de la sede actualizadas.');
   } finally {
     btn.disabled = false; btn.textContent = originalText;
   }
