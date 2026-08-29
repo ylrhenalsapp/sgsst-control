@@ -10,7 +10,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;colo
 .section{display:none}.section.active{display:block}.empty{padding:24px;text-align:center;color:var(--muted)}
 input,select,textarea{width:100%;border:1px solid #dbe3ea;border-radius:8px;padding:10px;background:#fff;font-size:13px}textarea{min-height:85px}.formgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.formgrid .full{grid-column:1/-1}.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:15px;flex-wrap:wrap}
 .link{color:#1769aa;text-decoration:none;font-weight:600}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.tabs button.active{background:var(--nav);color:#fff}
-.modal{display:none;position:fixed;inset:0;background:rgba(10,20,30,.48);z-index:50;padding:20px;align-items:center;justify-content:center}.modal.show{display:flex}.modalbox{width:min(720px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:15px;padding:22px}.modalbox h2{margin-top:0}.toast{position:fixed;right:22px;bottom:22px;background:#17324d;color:#fff;padding:13px 17px;border-radius:10px;display:none;z-index:99}
+.modal{display:none;position:fixed;inset:0;background:rgba(10,20,30,.48);z-index:200;padding:20px;align-items:center;justify-content:center}.modal.show{display:flex}.modalbox{width:min(720px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:15px;padding:22px}.modalbox h2{margin-top:0}.toast{position:fixed;right:22px;bottom:22px;background:#17324d;color:#fff;padding:13px 17px;border-radius:10px;display:none;z-index:99}
 .report{background:#f8fafc;border:1px dashed #ccd8e2;border-radius:10px;padding:20px;line-height:1.6}.kpirow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}.kpi{background:#fff;border:1px solid var(--line);padding:12px;border-radius:10px}.kpi b{display:block;font-size:18px}
 @media(max-width:1000px){.grid4{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.sidebar{position:static;width:100%}.app{display:block}.content{margin-left:0}.nav{display:flex;overflow:auto}.nav a{white-space:nowrap}.brand{padding-bottom:10px}}
 @media(max-width:650px){.content{padding:16px}.top{display:block}.grid4,.formgrid,.kpirow{grid-template-columns:1fr}.filters{margin-top:14px}.tablewrap{overflow:auto}}
@@ -295,7 +295,8 @@ body{overflow-x:hidden}
 .welcomeHi{font-size:19px;font-weight:800;color:var(--navy)}
 .welcomeRole{font-size:13px;color:var(--muted);margin-top:2px}
 .filterChip{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:0 12px;box-shadow:0 4px 14px rgba(35,65,88,.04)}
-.filterChip select,.filterChip input{border:none!important;box-shadow:none!important;background:transparent!important;padding:10px 4px 10px 0!important}
+.filterChip select,.filterChip input{border:none!important;box-shadow:none!important;background:transparent!important;padding:10px 4px 10px 0!important;color:var(--navy);font-weight:600;accent-color:var(--navy)}
+select{accent-color:var(--navy);cursor:pointer}
 .metricIcon{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;margin-bottom:10px}
 .iconBlue{background:#e7f1fd}
 .iconGreen{background:#e6f7ee}
@@ -396,4 +397,10 @@ body{overflow-x:hidden}
 
 @media(max-width:900px){
   .sidebarTip{display:none}
+  /* El modal debe quedar SIEMPRE por encima de la barra de pestañas móvil
+     (antes tenían el mismo nivel visual y la barra tapaba el botón
+     "Guardar" de los formularios). Se le da además espacio abajo para que
+     el cuadro no quede pegado a esa barra. */
+  .modal{padding-bottom:calc(20px + 70px + env(safe-area-inset-bottom))}
+  .modalbox{max-height:82vh}
 }

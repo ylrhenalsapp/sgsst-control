@@ -45,9 +45,7 @@ function generateReport() {
     <h3>💰 Valores y cobros</h3>
     <div class="kpirow">
       <div class="kpi"><span class="small">Horas ${scope === 'global' ? 'totales' : 'del mes'}</span><b>${used} h</b></div>
-      <div class="kpi"><span class="small">Valor ejecutado</span><b>${money(executed)}</b></div>
-      <div class="kpi"><span class="small">Valor pagado</span><b>${money(paidValue)}</b><span class="small">${paidCount} registro(s)</span></div>
-      <div class="kpi"><span class="small">Valor que me deben</span><b style="color:var(--red)">${money(owedValue)}</b><span class="small">${owedCount} registro(s) pendiente(s) de pago</span></div>
+      <div class="kpi"><span class="small">Saldo pendiente de pago</span><b style="color:var(--red)">${money(owedValue)}</b><span class="small">${owedCount} de ${rows.length} registro(s) · ejecutado ${money(executed)} · pagado ${money(paidValue)}</span></div>
     </div>
 
     <h3 style="margin-top:18px">🗂️ Bolsa de horas de ${m}</h3>

@@ -302,8 +302,7 @@ function openHoursModal() {
   $('hDate').value = today(); $('hRate').value = state.rate; $('hHours').value = ''; $('hStatus').value = 'En proceso'; $('hTotal').value = ''; $('hNotes').value = '';
   refreshHourTaskOptions(); updateHoursBagInfo(); openModal('hoursModal');
 }
-$('hHours')?.addEventListener('input', () => { $('hTotal').value = money(Number($('hHours').value || 0) * Number($('hRate').value || 0)); });
-$('hRate')?.addEventListener('input', () => { $('hTotal').value = money(Number($('hHours').value || 0) * Number($('hRate').value || 0)); });
+$('hHours')?.addEventListener('input', () => { $('hTotal').value = money(Number($('hHours').value || 0) * state.rate); });
 $('hDate')?.addEventListener('change', updateHoursBagInfo);
 $('hCompany')?.addEventListener('change', () => { fillSiteSelect('hCompany', 'hSite'); refreshHourTaskOptions(); updateHoursBagInfo(); });
 $('hSite')?.addEventListener('change', () => { refreshHourTaskOptions(); updateHoursBagInfo(); });
@@ -319,7 +318,7 @@ async function saveHours() {
   const status = $('hStatus').value;
   const { error } = await sb.from('hour_records').insert({
     company_id: c.id, site_id: s.id, activity_id: taskId, record_date: $('hDate').value,
-    hours: h, rate: Number($('hRate').value || state.rate), status, notes: $('hNotes').value,
+    hours: h, rate: state.rate, status, notes: $('hNotes').value,
     created_by: currentProfile?.id,
   });
   if (error) return toast('No se pudo guardar: ' + error.message);
@@ -547,4 +546,16 @@ showSection = function (id, el) {
   originalShowSection(id, el);
   document.querySelectorAll('.mtab').forEach(a => a.classList.toggle('active', a.dataset.tab === id));
   if (window.innerWidth <= 900) toggleMobileMenu(false);
+  // El calendario visual (FullCalendar) no se crea mientras la sección
+  // "Calendario" está oculta (ver renderFullCalendar en calendarView.js):
+  // si se creara oculto, quedaría con las columnas del mes colapsadas para
+  // siempre. Por eso, la primera vez que el usuario entra a esta sección,
+  // la creamos recién aquí; si ya existe, solo recalculamos el tamaño por
+  // si el ancho de la ventana cambió mientras estaba oculta.
+  if (id === 'calendario' && typeof renderFullCalendar === 'function') {
+    setTimeout(() => {
+      if (typeof fullCalendarInstance !== 'undefined' && fullCalendarInstance) fullCalendarInstance.updateSize();
+      else renderFullCalendar();
+    }, 50);
+  }
 };

@@ -191,7 +191,7 @@
 <div class="full"><label>Actividad</label><select id="hTask"></select></div>
 <div><label>Fecha</label><input id="hDate" type="date"></div><div><label>Horas</label><input id="hHours" type="number" min="0.25" step="0.25" placeholder="Ej: 2.5"></div>
 <div><label>Estado de la actividad</label><select id="hStatus"><option value="En proceso">En proceso</option><option value="Completado">Completado</option></select></div>
-<div><label>Tarifa / hora</label><input id="hRate" type="number" min="0" step="1000"></div>
+<div><label>Tarifa / hora</label><input id="hRate" type="number" readonly disabled title="La tarifa solo se cambia desde Configuración → Tarifas"></div>
 <div><label>Valor calculado</label><input id="hTotal" readonly></div>
 <div class="full"><div id="hBagInfo" class="small" style="padding:10px;background:#f4f7fa;border-radius:8px">Bolsa disponible: --</div></div>
 <div class="full"><label>Descripción / resultado</label><textarea id="hNotes" placeholder="¿Qué se realizó?"></textarea></div>
@@ -239,9 +239,9 @@
   <div><label>Nombre del líder</label><input id="scLeader" placeholder="Ej: Juan Pérez"></div>
   <div><label>Correo del líder</label><input id="scEmail" type="email" placeholder="correo@empresa.com"></div>
   <div><label>Disponibilidad informada por el líder</label><input id="scProposedDate" type="date"></div>
-  <div><label>Hora propuesta por el líder</label><input id="scProposedTime" type="time"></div>
+  <div><label>Hora propuesta por el líder</label><input id="scProposedTime" type="time" step="1800"></div>
   <div><label>Fecha programada por Yasbleidis</label><input id="scDate" type="date" onchange="checkScheduleAvailability()"></div>
-  <div><label>Hora programada</label><input id="scTime" type="time" onchange="checkScheduleAvailability()"></div>
+  <div><label>Hora programada</label><input id="scTime" type="time" step="1800" onchange="checkScheduleAvailability()"></div>
   <div><label>Duración estimada (minutos)</label><input id="scDuration" type="number" min="15" step="15" value="60" onchange="checkScheduleAvailability()"></div>
   <div><label>Recordatorio</label><select id="scReminder"><option value="30">30 minutos antes</option><option value="60">1 hora antes</option><option value="1440">1 día antes</option></select></div>
   <div class="full"><label>Observación / contexto</label><textarea id="scNotes" placeholder="Ej: Sesión acordada según conversación con el líder de la sede."></textarea></div>
@@ -249,8 +249,18 @@
 </div>
 <div class="actions">
   <button class="secondary" onclick="closeModal('scheduleModal')">Cancelar</button>
-  <button class="secondary" onclick="saveSchedule(false)">Guardar programación</button>
-  <button class="success" onclick="saveSchedule(true)">Guardar + Google Calendar</button>
+  <button class="secondary" onclick="saveSchedule(false,false)">Guardar programación</button>
+  <button class="primary" onclick="saveSchedule(false,true)">📩 Guardar + enviar correo al líder</button>
+  <button class="success" onclick="saveSchedule(true,false)">Guardar + Google Calendar</button>
+</div>
+</div></div>
+
+<div class="modal" id="eventInfoModal"><div class="modalbox">
+<h2>🗓️ Detalle de la cita</h2>
+<div id="eventInfoBody" class="eventInfoBody"></div>
+<div class="actions">
+  <button class="secondary" onclick="closeModal('eventInfoModal')">Cerrar</button>
+  <button class="primary" id="eventInfoResendBtn">🔄 Reenviar citación</button>
 </div>
 </div></div>
 

@@ -52,10 +52,11 @@ function googleCalendarUrl(e) {
   const details = `Sesión programada por Yasbleidis López Rhenals.\nLíder: ${e.leader_name || '-'}\nDisponibilidad informada: ${e.proposed_date || '-'} ${e.proposed_time || ''}\n${e.notes || ''}`;
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${fmt(start)}/${fmt(end)}&details=${encodeURIComponent(details)}`;
 }
-async function saveSchedule(openGoogle) {
+async function saveSchedule(openGoogle, sendEmail) {
   if (!checkScheduleAvailability()) return toast('El horario seleccionado se cruza con otra actividad de tu agenda.');
   const companyId = $('scCompany').value, siteId = $('scSite').value, taskId = $('scTask').value, date = $('scDate').value, time = $('scTime').value;
   if (!date || !time) return toast('Define la fecha y hora de la sesión.');
+  if (sendEmail && !$('scEmail').value.trim()) return toast('Ingresa el correo del líder para poder enviarle la notificación.');
   const { data: event, error } = await sb.from('schedule_events').insert({
     company_id: companyId, site_id: siteId, activity_id: taskId, event_date: date, event_time: time,
     duration_minutes: Number($('scDuration').value || 60), leader_name: $('scLeader').value.trim(), leader_email: $('scEmail').value.trim(),
@@ -66,6 +67,7 @@ async function saveSchedule(openGoogle) {
     if (error.code === '23P01') return toast('Ese horario ya está ocupado por otra sesión en esta sede (bloqueado por la base de datos).');
     return toast('No se pudo guardar: ' + error.message);
   }
+  if (sendEmail) { state.calendarSite.push(event); prepareScheduleEmail(event.id); }
   scheduleBrowserReminder(event); closeModal('scheduleModal'); await refreshAll();
   toast('Actividad programada correctamente en tu agenda.');
   if (openGoogle) window.open(googleCalendarUrl(event), '_blank');
@@ -85,6 +87,31 @@ function downloadICS(id) {
   a.href = URL.createObjectURL(blob); a.download = `actividad-${e.event_date}-${e.event_time.replace(':', '')}.ics`; a.click(); URL.revokeObjectURL(a.href);
 }
 async function deleteSchedule(id) { if (!confirm('¿Eliminar esta programación de tu agenda interna?')) return; const { error } = await sb.from('schedule_events').delete().eq('id', id); if (error) return toast(error.message); await refreshAll(); toast('Programación eliminada.'); }
+
+// ---------------------------------------------------------------------------
+// Detalle de una cita al hacer clic sobre el evento en el calendario visual:
+// muestra la información completa y permite reenviar la citación (mismo
+// correo de confirmación) al líder/coordinador sin tener que buscar el
+// evento en la lista del día.
+// ---------------------------------------------------------------------------
+function showEventInfo(id) {
+  const e = state.calendarSite.find(x => x.id === id);
+  if (!e) return;
+  const c = state.companies.find(x => x.id === e.company_id), s = c?.sites.find(x => x.id === e.site_id);
+  $('eventInfoBody').innerHTML = `
+    <p><b>Actividad:</b> ${taskName(e.activity_id)}</p>
+    <p><b>Empresa / Sede:</b> ${c?.name || ''} · ${s?.name || ''}</p>
+    <p><b>Fecha y hora:</b> ${formatDate(e.event_date)} · ${e.event_time} (${e.duration_minutes} min)</p>
+    <p><b>Líder / coordinador:</b> ${e.leader_name || 'Sin líder registrado'}${e.leader_email ? ' · ' + e.leader_email : ''}</p>
+    ${e.notes ? `<p><b>Observación:</b> ${e.notes}</p>` : ''}
+  `;
+  const resendBtn = $('eventInfoResendBtn');
+  if (resendBtn) {
+    resendBtn.style.display = e.leader_email ? 'inline-flex' : 'none';
+    resendBtn.onclick = () => prepareScheduleEmail(e.id);
+  }
+  openModal('eventInfoModal');
+}
 
 function renderCalendar() {
   if (!$('calendarDate')) return;
@@ -111,6 +138,18 @@ function scheduleBrowserReminder(e) {
 // reprogramar (respeta el mismo bloqueo de cruces que la agenda interna).
 // ---------------------------------------------------------------------------
 let fullCalendarInstance = null;
+let pendingCalendarEvents = null;
+function calendarSectionVisible() {
+  const s = $('calendario');
+  return !!s && s.offsetParent !== null;
+}
+// FullCalendar mide el ancho disponible al crearse. Si se instancia mientras
+// la sección "Calendario" está oculta (display:none, porque el Dashboard es
+// la sección activa por defecto), calcula un ancho de 0 y las columnas del
+// mes quedan colapsadas para siempre (no basta con updateSize() después:
+// hay que crearlo cuando el contenedor YA es visible). Por eso, si todavía
+// no es visible, solo guardamos los eventos y esperamos a que el usuario
+// entre a la sección (ver el hook en showSection, app.js).
 function renderFullCalendar() {
   const el = $('fullCalendarEl');
   if (!el || typeof FullCalendar === 'undefined') return;
@@ -121,6 +160,7 @@ function renderFullCalendar() {
     end: eventEnd(e).toISOString(),
     color: e.google_calendar_synced ? '#2f8a63' : '#2f658e',
   }));
+  if (!fullCalendarInstance && !calendarSectionVisible()) { pendingCalendarEvents = events; return; }
   if (!fullCalendarInstance) {
     fullCalendarInstance = new FullCalendar.Calendar(el, {
       locale: 'es',
@@ -129,7 +169,7 @@ function renderFullCalendar() {
       initialView: 'dayGridMonth',
       editable: true,
       events,
-      eventClick: info => { $('calendarDate').value = info.event.startStr.slice(0, 10); renderCalendar(); },
+      eventClick: info => { $('calendarDate').value = info.event.startStr.slice(0, 10); renderCalendar(); showEventInfo(info.event.id); },
       eventDrop: async info => {
         const newDate = info.event.startStr.slice(0, 10), newTime = info.event.startStr.slice(11, 16);
         const conflicts = scheduleConflicts(newDate, newTime, (info.event.end - info.event.start) / 60000, info.event.id);
