@@ -498,3 +498,14 @@ select{accent-color:var(--navy);cursor:pointer}
    (Registro de horas); sin un mínimo, flex:1 la deja casi invisible. */
 .progressRow .bar{min-width:60px}
 .wizActivityRow input[type=number]{width:78px;flex:0 0 auto}
+/* V15: widget circular de % de avance del mes (horas asignadas vs ejecutadas)
+   arriba de las tarjetas del Dashboard. */
+.monthProgressWrap{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.radialProgress{width:104px;height:104px;flex:0 0 auto;transform:rotate(-90deg)}
+.radialTrack{fill:none;stroke:var(--line);stroke-width:10}
+.radialBar{fill:none;stroke:var(--accent);stroke-width:10;stroke-linecap:round;stroke-dasharray:326.7256;stroke-dashoffset:326.7256;transition:stroke-dashoffset .6s ease,stroke .3s ease}
+.radialLabel{display:flex;flex-direction:column;min-width:180px}
+.radialPct{font-size:30px;font-weight:800;color:var(--text)}
+.radialSub{font-size:13px;color:var(--muted);margin-top:2px}
+.radialTitle{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-top:6px}
+@media (max-width:640px){.monthProgressWrap{gap:14px}.radialLabel{min-width:0}}

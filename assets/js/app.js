@@ -238,6 +238,21 @@ function renderBagAlert() {
 // ---------------------------------------------------------------------------
 // Dashboard
 // ---------------------------------------------------------------------------
+// Actualiza el aro circular "Avance de horas del mes" (horas ejecutadas vs
+// asignadas de la bolsa de la sede seleccionada). Cambia de color según el
+// porcentaje: verde normal, ámbar cerca del límite, rojo si ya se llegó al 100%.
+function updateMonthProgressRadial(used, total) {
+  const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
+  const CIRC = 326.7256; // 2 * PI * 52 (radio del <circle> del SVG)
+  const bar = $('radialProgressBar');
+  if (bar) {
+    bar.style.strokeDashoffset = String(CIRC * (1 - pct / 100));
+    bar.style.stroke = pct >= 100 ? 'var(--danger)' : pct >= 80 ? 'var(--warn)' : 'var(--accent)';
+  }
+  if ($('radialProgressPct')) $('radialProgressPct').textContent = pct + '%';
+  if ($('radialProgressSub')) $('radialProgressSub').textContent = `${used} h ejecutadas de ${total} h asignadas`;
+}
+
 function renderDashboard() {
   const s = site();
   if (!s) {
@@ -246,6 +261,7 @@ function renderDashboard() {
     document.querySelector('#mRemaining').parentElement.querySelector('.sub').textContent = `Disponible para ${selectedMonth()}`;
     $('dashboardActivities').innerHTML = '<p class="empty">Todavía no tienes ninguna empresa registrada. Ve a Configuración → Empresas y agrega la primera para empezar.</p>';
     $('recentRecords').innerHTML = '<div class="empty">Aún no hay registros.</div>';
+    updateMonthProgressRadial(0, 0);
     return;
   }
   const m = selectedMonth(), bag = state.bag;
@@ -256,6 +272,7 @@ function renderDashboard() {
   $('mValue').textContent = money(value);
   document.querySelector('#mAssigned').parentElement.querySelector('.sub').textContent = `Asignadas: ${bag.assigned} h · Saldo anterior: ${bag.carry} h · Adicionales: ${bag.additional} h`;
   document.querySelector('#mRemaining').parentElement.querySelector('.sub').textContent = `Disponible para ${m}`;
+  updateMonthProgressRadial(bag.used, bag.total);
 
   const dashActs = activitiesForSite(s.id);
   $('dashboardActivities').innerHTML = dashActs.length ? dashActs.map((t, i) => {
@@ -606,9 +623,14 @@ async function saveActivity() {
     const { data: bagData } = await sb.rpc('get_bag_summary', { p_site_id: s.id, p_month: `${m}-01` });
     const available = (bagData && bagData[0]?.remaining) || 0;
     if (hours > available) { toast(`Para ${m} solo quedan ${available} h en la bolsa. Debes agregar horas adicionales para continuar.`); closeModal('activityModal'); openAdditionalHoursModal(c.id, s.id, m); return; }
+    // hour_records.status solo admite 'En proceso' / 'Completado' (igual que
+    // el otro flujo de registro de horas) — 'Pendiente' es un estado válido
+    // para la actividad en sí (sin horas), pero nunca para un registro de
+    // horas ya ejecutadas, así que aquí se normaliza antes de insertar.
+    const hrStatus = status === 'Completado' ? 'Completado' : 'En proceso';
     const { error } = await sb.from('hour_records').insert({
       company_id: c.id, site_id: s.id, activity_id: tid, record_date: today(),
-      hours, rate: state.rate, status, notes: $('aNotes').value, source: 'avance', created_by: currentProfile?.id,
+      hours, rate: state.rate, status: hrStatus, notes: $('aNotes').value, source: 'avance', created_by: currentProfile?.id,
     });
     if (error) return toast('No se pudo guardar: ' + error.message);
   } else {

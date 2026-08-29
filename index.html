@@ -90,6 +90,19 @@
 <div id="bagAlertBanner" class="conflictBox conflictBad" style="display:none;margin-bottom:16px"></div>
 
 <section id="dashboard" class="section active">
+<div class="panel monthProgressPanel" id="monthProgressPanel" style="margin-bottom:16px">
+  <div class="monthProgressWrap">
+    <svg class="radialProgress" viewBox="0 0 120 120">
+      <circle class="radialTrack" cx="60" cy="60" r="52"></circle>
+      <circle class="radialBar" id="radialProgressBar" cx="60" cy="60" r="52"></circle>
+    </svg>
+    <div class="radialLabel">
+      <div class="radialPct" id="radialProgressPct">0%</div>
+      <div class="radialSub" id="radialProgressSub">0 h ejecutadas de 0 h asignadas</div>
+      <div class="radialTitle">Avance de horas del mes</div>
+    </div>
+  </div>
+</div>
 <div class="grid4">
   <div class="card metric"><div class="metricIcon iconBlue">⏱️</div><div class="label">Horas asignadas</div><div class="value" id="mAssigned">0</div><div class="sub">Bolsa de horas de la sede</div></div>
   <div class="card metric"><div class="metricIcon iconGreen">✅</div><div class="label">Horas ejecutadas</div><div class="value" id="mUsed">0</div><div class="sub">Según registros del periodo</div></div>
