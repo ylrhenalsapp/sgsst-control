@@ -111,8 +111,21 @@ async function init() {
 
 function refreshSitesFilter() {
   const c = company();
+  // Reconstruir el <select> con innerHTML borra la selección anterior (el
+  // navegador vuelve a marcar la PRIMERA opción como elegida al no haber
+  // ningún <option selected>). Por eso, antes de reconstruirlo, se guarda
+  // qué sede tenía elegida el usuario para volver a aplicarla después —
+  // si no se hacía esto, elegir la segunda sede de una empresa con varias
+  // sedes se deshacía solo en cuanto refreshAll() volvía a llamar a esta
+  // función (por ejemplo, disparado por el propio cambio de sede), y la
+  // sede seleccionada saltaba siempre de vuelta a la primera de la lista.
+  const desired = $('filterSite').value;
   $('filterSite').innerHTML = options(c ? c.sites : []);
-  if (!c?.sites.some(s => s.id === $('filterSite').value)) $('filterSite').selectedIndex = 0;
+  if (c?.sites.some(s => s.id === desired)) {
+    $('filterSite').value = desired;
+  } else {
+    $('filterSite').selectedIndex = 0;
+  }
 }
 
 // ---------------------------------------------------------------------------
