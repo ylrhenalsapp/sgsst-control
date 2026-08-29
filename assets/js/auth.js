@@ -47,17 +47,12 @@ async function onLoggedIn(session) {
 
   const initials = profile.full_name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
   const topAvatar = document.getElementById('topAvatar');
-  const welcomeAvatar = document.getElementById('welcomeAvatar');
   const welcomeName = document.getElementById('welcomeName');
   const welcomeRole = document.getElementById('welcomeRole');
-  const menuUserName = document.getElementById('menuUserName');
-  const menuUserRole = document.getElementById('menuUserRole');
   if (topAvatar) topAvatar.textContent = initials;
-  if (welcomeAvatar) welcomeAvatar.textContent = initials;
   if (welcomeName) welcomeName.textContent = profile.full_name;
   if (welcomeRole) welcomeRole.textContent = profile.position_title || '';
-  if (menuUserName) menuUserName.textContent = profile.full_name;
-  if (menuUserRole) menuUserRole.textContent = profile.position_title || '';
+  if (typeof renderMiniCalendar === 'function') renderMiniCalendar();
 
   applyRolePermissions(profile.role);
 
@@ -110,15 +105,7 @@ function toggleNotifPanel(force) {
   const p = document.getElementById('notifPanel'); if (!p) return;
   const open = typeof force === 'boolean' ? force : !p.classList.contains('show');
   p.classList.toggle('show', open);
-  if (open) document.getElementById('userMenuPanel')?.classList.remove('show');
-}
-function toggleUserMenu(force) {
-  const p = document.getElementById('userMenuPanel'); if (!p) return;
-  const open = typeof force === 'boolean' ? force : !p.classList.contains('show');
-  p.classList.toggle('show', open);
-  if (open) document.getElementById('notifPanel')?.classList.remove('show');
 }
 document.addEventListener('click', e => {
   if (!e.target.closest('.notifWrap')) document.getElementById('notifPanel')?.classList.remove('show');
-  if (!e.target.closest('.userAvatarWrap')) document.getElementById('userMenuPanel')?.classList.remove('show');
 });

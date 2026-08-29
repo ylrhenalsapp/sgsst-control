@@ -29,21 +29,21 @@
 <div id="userTop" class="userTop" style="display:none">
   <div class="topbarLeft">
     <button class="mobileMenuBtn" onclick="toggleMobileMenu()">☰</button>
-    <div class="topbarLogo"><img src="assets/img/logo-sst-header.png" alt="SST Asesorías y consultorías"></div>
+    <div class="userIdentity">
+      <div class="userAvatarWrap"><div class="userAvatar" id="topAvatar">YL</div><span class="avatarDot"></span></div>
+      <div style="min-width:0">
+        <div class="userGreeting">¡Hola, <span id="welcomeName">Usuario</span>!</div>
+        <div class="userRole" id="welcomeRole"></div>
+      </div>
+    </div>
   </div>
   <div class="topbarRight">
+    <div class="userLoginBadge">✓ Sesión activa</div>
     <div class="notifWrap">
       <button class="notifBell" onclick="toggleNotifPanel()" title="Notificaciones">🔔<span class="notifCount" id="notifCount" style="display:none">0</span></button>
       <div id="notifPanel" class="notifPanel"></div>
     </div>
-    <div class="userAvatarWrap" onclick="toggleUserMenu()" title="Cuenta">
-      <div class="userAvatar" id="topAvatar">YL</div><span class="avatarDot"></span>
-      <div id="userMenuPanel" class="userMenuPanel">
-        <div class="userName" id="menuUserName">Usuario</div>
-        <div class="userRole" id="menuUserRole"></div>
-        <button class="secondary" style="width:100%;margin-top:10px" onclick="logout()">Cerrar sesión</button>
-      </div>
-    </div>
+    <button class="secondary" onclick="logout()">🚪 Cerrar sesión</button>
   </div>
 </div>
 
@@ -58,16 +58,22 @@
 
 <div class="app">
 <aside class="sidebar">
-  <div class="brand">SG-SST CONTROL<small>Horas · Actividades · Evidencias · Informes</small></div>
+  <div class="sidebarLogo"><img src="assets/img/logo-sst-header.png" alt="SST Asesorías y Consultorías"></div>
+  <p class="sidebarBlurb">🛡️ Te ayudamos a crear entornos de trabajo más seguros, saludables y productivos.</p>
   <nav class="nav">
-    <a href="#dashboard" class="active" onclick="showSection('dashboard',this)">📊 Dashboard</a>
-    <a href="#actividades" onclick="showSection('actividades',this)">📋 Actividades</a>
-    <a href="#horas" onclick="showSection('horas',this)">⏱️ Registro de horas</a>
-    <a href="#evidencias" onclick="showSection('evidencias',this)">📎 Evidencias y links</a>
-    <a href="#calendario" onclick="showSection('calendario',this);renderCalendar()">🗓️ Calendario</a>
-    <a href="#informes" onclick="showSection('informes',this)">📄 Informes</a>
-    <a href="#configuracion" onclick="showSection('configuracion',this)">⚙️ Configuración</a>
+    <a href="#dashboard" class="active" onclick="showSection('dashboard',this)"><span class="navIcon iconBlue">📊</span>Dashboard</a>
+    <a href="#actividades" onclick="showSection('actividades',this)"><span class="navIcon iconPurple">📋</span>Actividades</a>
+    <a href="#horas" onclick="showSection('horas',this)"><span class="navIcon iconGreen">⏱️</span>Registro de horas</a>
+    <a href="#evidencias" onclick="showSection('evidencias',this)"><span class="navIcon iconOrange">📎</span>Evidencias y links</a>
+    <a href="#calendario" onclick="showSection('calendario',this);renderCalendar()"><span class="navIcon iconTeal">🗓️</span>Calendario</a>
+    <a href="#informes" onclick="showSection('informes',this)"><span class="navIcon iconOrange">📄</span>Informes</a>
+    <a href="#configuracion" onclick="showSection('configuracion',this)"><span class="navIcon iconPurple">⚙️</span>Configuración</a>
   </nav>
+  <div class="sidebarTip">
+    <div class="sidebarTipIcon">📈🛡️</div>
+    <div class="sidebarTipTitle">Control total, mejores resultados</div>
+    <div class="sidebarTipText">Gestiona, mide y mejora cada proceso en tiempo real.</div>
+  </div>
 </aside>
 
 <main class="content">
@@ -83,13 +89,6 @@
 <div id="bagAlertBanner" class="conflictBox conflictBad" style="display:none;margin-bottom:16px"></div>
 
 <section id="dashboard" class="section active">
-<div class="welcomeCard">
-  <div class="welcomeLeft">
-    <div class="userAvatar big" id="welcomeAvatar">YL</div>
-    <div><div class="welcomeHi">¡Hola, <span id="welcomeName">Usuario</span>!</div><div class="welcomeRole" id="welcomeRole"></div></div>
-  </div>
-  <div class="userLoginBadge">✓ Sesión activa</div>
-</div>
 <div class="grid4">
   <div class="card metric"><div class="metricIcon iconBlue">⏱️</div><div class="label">Horas asignadas</div><div class="value" id="mAssigned">0</div><div class="sub">Bolsa de horas de la sede</div></div>
   <div class="card metric"><div class="metricIcon iconGreen">✅</div><div class="label">Horas ejecutadas</div><div class="value" id="mUsed">0</div><div class="sub">Según registros del periodo</div></div>
@@ -99,12 +98,15 @@
 <div class="grid2" style="margin-top:18px">
  <div class="panel"><div class="panelhead"><h2>Las 5 actividades del proyecto</h2><button class="primary" data-requires-write onclick="openActivityModal()">+ Registrar avance</button></div><div id="dashboardActivities"></div></div>
  <div>
-  <div class="panel"><div class="panelhead"><h2>Acciones rápidas</h2></div>
-    <p><button class="primary" data-requires-write onclick="openHoursModal()">⏱️ Registrar horas</button></p>
-    <p><button class="secondary" data-requires-write onclick="openEvidenceModal()">📎 Cargar evidencia o link</button></p>
-    <p><button class="primary" data-requires-write onclick="openScheduleModal()">🗓️ Programar actividad</button></p>
-    <p><button class="success" onclick="showSection('informes',document.querySelector('.nav a[href=&quot;#informes&quot;]'));generateReport()">📄 Generar informe</button></p>
+  <div class="panel"><div class="panelhead"><h2>⚡ Acciones rápidas</h2></div>
+    <div class="quickActions">
+      <button class="quickAction qaBlue" data-requires-write onclick="openHoursModal()"><span class="navIcon iconBlue">⏱️</span>Registrar horas</button>
+      <button class="quickAction qaTeal" data-requires-write onclick="openEvidenceModal()"><span class="navIcon iconTeal">📎</span>Cargar evidencia o link</button>
+      <button class="quickAction qaGreen" data-requires-write onclick="openScheduleModal()"><span class="navIcon iconGreen">🗓️</span>Programar actividad</button>
+      <button class="quickAction qaOrange" onclick="showSection('informes',document.querySelector('.nav a[href=&quot;#informes&quot;]'));generateReport()"><span class="navIcon iconOrange">📄</span>Generar informe</button>
+    </div>
   </div>
+  <div class="panel"><div class="panelhead"><h2>Calendario</h2><button class="secondary" onclick="showSection('calendario',document.querySelector('.nav a[href=&quot;#calendario&quot;]'));renderCalendar()" style="padding:4px 10px;font-size:12px">Ver completo</button></div><div id="miniCalendar" class="miniCalendar"></div></div>
   <div class="panel"><div class="panelhead"><h2>Últimos registros</h2></div><div id="recentRecords"></div></div>
  </div>
 </div>

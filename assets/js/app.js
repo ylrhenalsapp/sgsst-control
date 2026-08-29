@@ -122,7 +122,36 @@ async function refreshAll() {
   renderConfig();
   renderCalendar();
   renderNotifBell();
+  renderMiniCalendar();
   if (typeof renderFullCalendar === 'function') renderFullCalendar();
+}
+
+// ---------------------------------------------------------------------------
+// Mini calendario decorativo del panel "Acciones rápidas" (solo visual, no
+// interactivo: muestra el mes actual con el día de hoy resaltado). El
+// calendario completo con eventos reales sigue viviendo en la sección
+// "Calendario" (renderCalendar / renderFullCalendar en calendarView.js).
+// ---------------------------------------------------------------------------
+function renderMiniCalendar() {
+  const el = $('miniCalendar');
+  if (!el) return;
+  const now = new Date();
+  const year = now.getFullYear(), month = now.getMonth();
+  const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7; // lunes = 0
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayNum = now.getDate();
+  let cells = '';
+  for (let i = 0; i < firstDow; i++) cells += '<span class="miniCalDay empty"></span>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells += `<span class="miniCalDay${d === todayNum ? ' today' : ''}">${d}</span>`;
+  }
+  el.innerHTML = `
+    <div class="miniCalHead">${monthNames[month]} ${year}</div>
+    <div class="miniCalGrid miniCalGridHead">
+      <span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span>
+    </div>
+    <div class="miniCalGrid">${cells}</div>`;
 }
 
 function activityTarget(siteId, activityId) { return state.targetsMap[`${siteId}|${activityId}`] || null; }

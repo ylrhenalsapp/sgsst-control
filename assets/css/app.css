@@ -334,3 +334,66 @@ body{overflow-x:hidden}
   .userTop{padding:8px 14px}
   .topbarLogo img{height:28px}
 }
+
+/* ===== V11: SIDEBAR CLARA CON LOGO REAL + TOPBAR FUSIONADO + ACCIONES CON
+   COLOR + MINI CALENDARIO (para igualar el mockup entregado por la clienta) */
+.sidebar{
+  background:#fff!important;
+  border-right:1px solid var(--line);
+  box-shadow:2px 0 18px rgba(22,49,72,.05)!important;
+  display:flex;flex-direction:column;padding:22px 16px!important
+}
+.sidebarLogo{padding:4px 6px 14px;text-align:center}
+.sidebarLogo img{max-width:100%;height:auto;display:inline-block}
+.sidebarBlurb{
+  font-size:12.5px;line-height:1.5;color:var(--muted);
+  background:#f3f8fb;border:1px solid var(--line);border-radius:14px;
+  padding:12px 14px;margin:0 6px 18px
+}
+.nav a{
+  display:flex!important;align-items:center;gap:10px;
+  color:var(--text)!important;font-weight:600
+}
+.nav a:hover{background:#eef4f9!important;transform:translateX(2px)}
+.nav a.active{
+  background:#e4f0fb!important;color:var(--navy)!important;
+  box-shadow:none!important
+}
+.navIcon{
+  width:30px;height:30px;border-radius:9px;flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;font-size:14px
+}
+.sidebarTip{
+  margin:auto 6px 6px;padding:16px;border-radius:16px;
+  background:linear-gradient(135deg,#18324a,#2d668e);color:#fff;
+  text-align:center
+}
+.sidebarTipIcon{font-size:20px;margin-bottom:8px}
+.sidebarTipTitle{font-weight:800;font-size:13.5px;margin-bottom:6px}
+.sidebarTipText{font-size:11.5px;opacity:.85;line-height:1.4}
+
+.userGreeting{font-size:16px;font-weight:800;color:var(--navy)}
+
+.quickActions{display:flex;flex-direction:column;gap:10px}
+.quickAction{
+  display:flex;align-items:center;gap:10px;width:100%;
+  border:1px solid var(--line)!important;border-radius:14px!important;
+  padding:10px 14px!important;font-weight:700!important;font-size:13.5px;
+  text-align:left;box-shadow:none!important
+}
+.quickAction.qaBlue{background:#eaf3fd!important;color:#1d4e78!important}
+.quickAction.qaTeal{background:#e2f6f3!important;color:#1a6f64!important}
+.quickAction.qaGreen{background:#e6f7ee!important;color:#21714f!important}
+.quickAction.qaOrange{background:#fdf0e3!important;color:#93551a!important}
+
+.miniCalendar{padding:4px 2px}
+.miniCalHead{font-weight:800;color:var(--navy);font-size:13px;margin-bottom:10px;text-align:center;text-transform:capitalize}
+.miniCalGrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+.miniCalGridHead{margin-bottom:4px;font-size:10.5px;font-weight:800;color:var(--muted)}
+.miniCalDay{font-size:12px;padding:6px 0;border-radius:8px;color:var(--text)}
+.miniCalDay.empty{visibility:hidden}
+.miniCalDay.today{background:var(--navy);color:#fff;font-weight:800}
+
+@media(max-width:900px){
+  .sidebarTip{display:none}
+}
