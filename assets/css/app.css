@@ -388,7 +388,9 @@ select{accent-color:var(--navy);cursor:pointer}
 .quickAction.qaOrange{background:#fdf0e3!important;color:#93551a!important}
 
 .miniCalendar{padding:4px 2px}
-.miniCalHead{font-weight:800;color:var(--navy);font-size:13px;margin-bottom:10px;text-align:center;text-transform:capitalize}
+.miniCalHead{display:flex;align-items:center;justify-content:space-between;font-weight:800;color:var(--navy);font-size:13px;margin-bottom:10px;text-transform:capitalize}
+.miniCalNav{width:24px;height:24px;padding:0;border-radius:8px;background:#eef3f7;color:var(--navy);font-size:14px;font-weight:800;line-height:1;flex:0 0 auto}
+.miniCalNav:hover{filter:brightness(.95)}
 .miniCalGrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
 .miniCalGridHead{margin-bottom:4px;font-size:10.5px;font-weight:800;color:var(--muted)}
 .miniCalDay{font-size:12px;padding:6px 0;border-radius:8px;color:var(--text)}

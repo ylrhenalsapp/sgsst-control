@@ -46,6 +46,7 @@ let state = {
   closedMonths: new Set(), // `${siteId}|${'YYYY-MM'}` -> mes cerrado (no admite horas nuevas ni edición)
   bag: { assigned: 0, additional: 0, carry: 0, total: 0, used: 0, remaining: 0 },
   bagExists: false,
+  activityLog: [], // bitácora de acciones relevantes (empresas creadas, actividades cargadas, horas registradas)
 };
 
 // Iconos y colores decorativos por actividad (solo visual, no afecta datos)
@@ -114,8 +115,47 @@ function refreshSitesFilter() {
   if (!c?.sites.some(s => s.id === $('filterSite').value)) $('filterSite').selectedIndex = 0;
 }
 
+// ---------------------------------------------------------------------------
+// Bitácora de actividad: registro de acciones relevantes (creación de
+// empresas/sedes, carga de actividades a una sede, registro de horas) para
+// mostrar un feed de "qué se ha hecho" en el Dashboard. Es de solo lectura
+// desde la interfaz (nadie edita ni borra entradas, para que sirva de
+// histórico confiable). Si la tabla todavía no existe en la base de datos
+// (falta correr la migración) falla en silencio y el panel queda vacío, sin
+// romper el resto del Dashboard.
+// ---------------------------------------------------------------------------
+async function logActivity(actionType, description, { companyId = null, siteId = null } = {}) {
+  try {
+    await sb.from('activity_log').insert({
+      action_type: actionType, description, company_id: companyId, site_id: siteId, created_by: currentProfile?.id,
+    });
+  } catch (e) { /* la bitácora nunca debe interrumpir la acción principal */ }
+}
+
+async function refreshActivityLog() {
+  try {
+    const { data, error } = await sb.from('activity_log').select('*').order('created_at', { ascending: false }).limit(20);
+    state.activityLog = error ? [] : (data || []);
+  } catch (e) {
+    state.activityLog = [];
+  }
+  renderActivityLog();
+}
+
+function renderActivityLog() {
+  const el = $('activityLogList');
+  if (!el) return;
+  if (!state.activityLog.length) { el.innerHTML = '<div class="empty">Aún no hay actividad registrada.</div>'; return; }
+  el.innerHTML = state.activityLog.map(r => {
+    const dt = new Date(r.created_at);
+    const when = isNaN(dt) ? '' : dt.toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return `<div style="padding:9px 0;border-bottom:1px solid var(--line)"><div class="small">${when}</div>${r.description}</div>`;
+  }).join('');
+}
+
 async function refreshAll() {
   refreshSitesFilter();
+  refreshActivityLog();
   if ($('reportMonth') && !$('reportMonth').value) $('reportMonth').value = selectedMonth();
   const s = site();
   if (!s) {
@@ -187,22 +227,35 @@ async function refreshAll() {
 // calendario completo con eventos reales sigue viviendo en la sección
 // "Calendario" (renderCalendar / renderFullCalendar en calendarView.js).
 // ---------------------------------------------------------------------------
+// Desplazamiento en meses respecto al mes actual (0 = mes de hoy, 1 = mes
+// siguiente, -1 = mes anterior, etc.) — se conserva mientras la pestaña
+// siga abierta; al recargar la página vuelve a mostrar el mes de hoy.
+let miniCalOffset = 0;
+function miniCalShift(delta) { miniCalOffset += delta; renderMiniCalendar(); }
+
 function renderMiniCalendar() {
   const el = $('miniCalendar');
   if (!el) return;
   const now = new Date();
-  const year = now.getFullYear(), month = now.getMonth();
+  const base = new Date(now.getFullYear(), now.getMonth() + miniCalOffset, 1);
+  const year = base.getFullYear(), month = base.getMonth();
   const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
   const firstDow = (new Date(year, month, 1).getDay() + 6) % 7; // lunes = 0
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const todayNum = now.getDate();
+  // El día de hoy solo se resalta cuando efectivamente se está viendo el mes
+  // actual (miniCalOffset === 0); en otro mes no hay "hoy" que resaltar.
+  const todayNum = miniCalOffset === 0 ? now.getDate() : -1;
   let cells = '';
   for (let i = 0; i < firstDow; i++) cells += '<span class="miniCalDay empty"></span>';
   for (let d = 1; d <= daysInMonth; d++) {
     cells += `<span class="miniCalDay${d === todayNum ? ' today' : ''}">${d}</span>`;
   }
   el.innerHTML = `
-    <div class="miniCalHead">${monthNames[month]} ${year}</div>
+    <div class="miniCalHead">
+      <button class="miniCalNav" onclick="miniCalShift(-1)" title="Mes anterior">‹</button>
+      <span>${monthNames[month]} ${year}</span>
+      <button class="miniCalNav" onclick="miniCalShift(1)" title="Mes siguiente">›</button>
+    </div>
     <div class="miniCalGrid miniCalGridHead">
       <span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span>
     </div>
@@ -449,6 +502,15 @@ function showSection(id, el) {
   document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
   if (el) el.classList.add('active');
   $('pageTitle').textContent = el ? el.textContent.trim().replace(/^[^\wÁÉÍÓÚÜÑáéíóúüñ]+\s*/, '') : 'Dashboard';
+  // El calendario visual (FullCalendar) solo puede crearse una vez su
+  // contenedor ya es visible (si se crea oculto, mide ancho 0 y las columnas
+  // quedan colapsadas para siempre). Antes esto dependía de que refreshAll()
+  // se ejecutara justo mientras la sección "Calendario" ya estaba activa —
+  // casi nunca pasaba navegando normalmente desde el Dashboard — así que las
+  // actividades programadas nunca llegaban a pintarse en el calendario
+  // visual. Ahora se fuerza aquí mismo, justo cuando la sección se hace
+  // visible, con los datos ya cargados en state.calendarSite.
+  if (id === 'calendario' && typeof renderFullCalendar === 'function') renderFullCalendar();
 }
 function fillCommon(companyId, siteId, taskId) { $(companyId).innerHTML = options(state.companies); $(taskId).innerHTML = options(state.activities); fillSiteSelect(companyId, siteId); }
 function fillSiteSelect(companyId, siteId) { const c = state.companies.find(x => x.id === $(companyId).value) || state.companies[0]; $(siteId).innerHTML = options(c ? c.sites : []); }
@@ -534,6 +596,9 @@ async function saveHours() {
   }
   if (error) return toast('No se pudo guardar: ' + error.message);
   editingHourId = null;
+  logActivity('hours_registered', wasEditing
+    ? `Se editaron horas de "${taskName(taskId)}" (${s.name}): ahora ${h} h el ${$('hDate').value}.`
+    : `Se registraron ${h} h en "${taskName(taskId)}" (${s.name}) el ${$('hDate').value}.`, { companyId: c.id, siteId: s.id });
   closeModal('hoursModal'); await refreshAll();
   toast(wasEditing ? 'Horas actualizadas.' : (status === 'Completado' ? 'Horas registradas y actividad cerrada.' : 'Horas registradas. La actividad queda abierta para nuevos días.'));
 }
@@ -633,6 +698,7 @@ async function saveActivity() {
       hours, rate: state.rate, status: hrStatus, notes: $('aNotes').value, source: 'avance', created_by: currentProfile?.id,
     });
     if (error) return toast('No se pudo guardar: ' + error.message);
+    logActivity('hours_registered', `Se registraron ${hours} h en "${taskName(tid)}" (${s.name}) el ${today()}.`, { companyId: c.id, siteId: s.id });
   } else {
     // Pendiente/En proceso sin horas: solo cambia el estado, sin registrar horas.
     const { error } = await sb.from('activity_status_history').insert({
@@ -806,9 +872,9 @@ const PG_UNIQUE_VIOLATION = '23505';
 async function wizardSave() {
   const btn = $('wizNextBtn'); btn.disabled = true; const originalText = btn.textContent; btn.textContent = 'Guardando…';
   try {
-    let companyId;
+    let companyId, companyName, companyWasCreated = false;
     if (wizardMode === 'company') {
-      const companyName = $('wizCompanyName').value.trim();
+      companyName = $('wizCompanyName').value.trim();
       const { data, error } = await sb.from('companies').insert({ name: companyName }).select('id').single();
       if (error && error.code === PG_UNIQUE_VIOLATION) {
         const { data: existing, error: findError } = await sb.from('companies').select('id').eq('name', companyName).maybeSingle();
@@ -819,13 +885,15 @@ async function wizardSave() {
         return toast(error.message);
       } else {
         companyId = data.id;
+        companyWasCreated = true;
       }
     } else {
       companyId = $('wizCompanySelect').value;
+      companyName = state.companies.find(c => c.id === companyId)?.name || '';
     }
 
     const siteName = $('wizSiteName').value.trim();
-    let siteId;
+    let siteId, siteWasCreated = false;
     const { data: siteData, error: siteError } = await sb.from('sites').insert({ company_id: companyId, name: siteName }).select('id').single();
     if (siteError && siteError.code === PG_UNIQUE_VIOLATION) {
       const { data: existingSite, error: findSiteError } = await sb.from('sites').select('id').eq('company_id', companyId).eq('name', siteName).maybeSingle();
@@ -836,17 +904,23 @@ async function wizardSave() {
       return toast(siteError.message);
     } else {
       siteId = siteData.id;
+      siteWasCreated = true;
       const hoursAssigned = Number($('wizSiteHours').value || 0);
       if (hoursAssigned > 0) {
         await sb.from('monthly_bags').insert({ site_id: siteId, month: `${monthNow()}-01`, assigned_hours: hoursAssigned, assigned_date: today(), created_by: currentProfile?.id });
       }
     }
 
+    if (companyWasCreated) logActivity('company_created', `Se creó la empresa "${companyName}".`, { companyId });
+    if (siteWasCreated) logActivity('site_created', `Se creó la sede "${siteName}" en la empresa "${companyName}".`, { companyId, siteId });
+
     const allActivityIds = new Set(wizardSelectedActivityIds);
+    const newActivityNames = [];
     for (const name of wizardNewActivities) {
       const { data: actData, error: actError } = await sb.from('activities').insert({ name, is_fixed: false }).select('id').single();
       if (actError) { toast(`No se pudo crear la actividad "${name}": ${actError.message}`); continue; }
       allActivityIds.add(actData.id);
+      newActivityNames.push(name);
     }
 
     if (allActivityIds.size > 0) {
@@ -859,6 +933,7 @@ async function wizardSave() {
       if (rows.length) {
         const { error: linkError } = await sb.from('site_activities').insert(rows);
         if (linkError) toast('Sede creada, pero hubo un problema asignando actividades: ' + linkError.message);
+        else logActivity('activities_loaded', `Se cargaron ${rows.length} actividad(es) a la sede "${siteName}" (${companyName}).`, { companyId, siteId });
       }
     }
 
@@ -958,6 +1033,8 @@ async function saveSiteActivities() {
     if (toAdd.length) {
       const { error } = await sb.from('site_activities').insert(toAdd.map(activity_id => ({ site_id: saSiteId, activity_id, created_by: currentProfile?.id })));
       if (error) return toast('No se pudo agregar alguna actividad: ' + error.message);
+      const c = state.companies.find(x => x.id === saCompanyId), s = c?.sites.find(x => x.id === saSiteId);
+      logActivity('activities_loaded', `Se cargaron ${toAdd.length} actividad(es) a la sede "${s?.name || ''}" (${c?.name || ''}).`, { companyId: saCompanyId, siteId: saSiteId });
     }
     if (toRemove.length) {
       const { error } = await sb.from('site_activities').delete().eq('site_id', saSiteId).in('activity_id', toRemove);
@@ -1044,7 +1121,7 @@ async function saveAdditionalHours() {
 }
 async function removeSite(cid, sid) { const c = state.companies.find(x => x.id === cid); if (c.sites.length <= 1) return toast('La empresa debe conservar al menos una sede'); if (confirm('¿Eliminar sede?')) { const { error } = await sb.from('sites').delete().eq('id', sid); if (error) return toast(error.message); await init(); } }
 async function updateRate() { const v = Number($('globalRate').value || 0); const { error } = await sb.from('app_settings').upsert({ key: 'default_rate', value: v }); if (error) return toast(error.message); state.rate = v; toast('Tarifa actualizada'); }
-async function addTaskPrompt() { const n = prompt('Nombre de la nueva actividad:'); if (!n?.trim()) return; const { error } = await sb.from('activities').insert({ name: n.trim(), is_fixed: false }); if (error) return toast(error.message); await init(); toast('Actividad agregada'); }
+async function addTaskPrompt() { const n = prompt('Nombre de la nueva actividad:'); if (!n?.trim()) return; const { error } = await sb.from('activities').insert({ name: n.trim(), is_fixed: false }); if (error) return toast(error.message); logActivity('activities_loaded', `Se agregó la actividad "${n.trim()}" al catálogo.`); await init(); toast('Actividad agregada'); }
 // Corrige el nombre de una actividad del catálogo (por ejemplo, si quedó mal
 // escrita al crearla). Cambia el nombre en todas las sedes donde ya está
 // asignada y en el historial de horas/evidencias/informes, que solo guardan
