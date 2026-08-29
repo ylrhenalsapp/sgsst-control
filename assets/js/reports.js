@@ -195,6 +195,15 @@ function prepareEmail() {
   window.location.href = `mailto:?subject=${subject}&body=${body}`;
 }
 
+// jsPDF/html2canvas no logran dibujar emojis de forma confiable (el motor de
+// texto de jsPDF los codifica mal y salen como símbolos ilegibles tipo
+// "Ø=Ü..."). Los emojis son solo decorativos en el informe, así que para la
+// exportación a PDF se quitan de una copia temporal del contenido; en
+// pantalla y en el Word sí se conservan normalmente.
+function stripEmojiForPdf(html) {
+  return html.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{2300}-\u{23FF}\u{2190}-\u{21FF}\u{FE0F}]\s?/gu, '');
+}
+
 function exportReportPDF() {
   const r = lastReport || generateReport();
   if (!r) return;
@@ -205,14 +214,16 @@ function exportReportPDF() {
   const doc = new jsPDF('p', 'pt', 'a4');
   const filename = `informe-sgsst-${r.s.name.replace(/\s+/g, '_')}-${r.m}.pdf`;
   toast('Generando PDF, un momento…');
+  const originalHtml = el.innerHTML;
+  el.innerHTML = stripEmojiForPdf(originalHtml);
   doc.html(el, {
     x: 20,
     y: 20,
     width: 555,
     windowWidth: 1000,
-    autoPaging: 'text',
+    autoPaging: 'slice',
     html2canvas: { backgroundColor: '#ffffff' },
-    callback: doc => doc.save(filename),
+    callback: doc => { el.innerHTML = originalHtml; doc.save(filename); },
   });
 }
 
