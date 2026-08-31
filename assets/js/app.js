@@ -60,6 +60,19 @@ function site() { const c = company(); return c?.sites.find(s => s.id === $('fil
 function selectedMonth() { return $('filterMonth').value || monthNow(); }
 function taskName(id) { return state.activities.find(t => t.id === id)?.name || 'Actividad'; }
 function safeUrl(u) { return /^https?:\/\//i.test(u || '') ? u : '#'; }
+// La tarifa es POR EMPRESA (no por sede ni global): cada empresa trae su
+// propia companies.rate. state.rate solo queda como último recurso (empresa
+// sin tarifa cargada, o ningún filtro seleccionado todavía).
+function companyRate(c) { return Number(c?.rate ?? state.rate ?? 50000); }
+// Mensaje para cuando no hay ninguna sede seleccionable: distingue entre "no
+// tienes ninguna empresa todavía" y "esta empresa existe pero se quedó sin
+// sedes" (empresa inactiva — se puede eliminar la última sede de una
+// empresa sin borrar la empresa, y mientras no tenga sedes queda inactiva).
+function noSiteMessage() {
+  if (!state.companies.length) return 'Todavía no tienes ninguna empresa registrada. Ve a Configuración → Empresas y agrega la primera para empezar.';
+  const c = company();
+  return `La empresa "${c?.name || ''}" está inactiva: no tiene ninguna sede. Agrégale una sede desde Configuración → Sedes y horas para activarla.`;
+}
 
 // Actividades del catálogo global que están asignadas a una sede en
 // concreto (antes toda sede veía TODAS las actividades sin distinción).
@@ -90,7 +103,7 @@ async function init() {
   // paralelo (antes iban una detrás de otra) para que el primer ingreso a
   // la plataforma no tarde la suma de las 3, sino solo la más lenta.
   const [{ data: companies }, { data: activities }, { data: rateRow }, { data: siteActs }] = await Promise.all([
-    sb.from('companies').select('id,name,sites(id,name)').order('name'),
+    sb.from('companies').select('id,name,rate,sites(id,name)').order('name'),
     sb.from('activities').select('id,name,is_fixed').order('is_fixed', { ascending: false }).order('name'),
     sb.from('app_settings').select('value').eq('key', 'default_rate').maybeSingle(),
     sb.from('site_activities').select('site_id,activity_id'),
@@ -336,7 +349,8 @@ function renderDashboard() {
     $('mAssigned').textContent = '0 h'; $('mUsed').textContent = '0 h'; $('mRemaining').textContent = '0 h'; $('mValue').textContent = money(0);
     document.querySelector('#mAssigned').parentElement.querySelector('.sub').textContent = 'Asignadas: 0 h · Saldo anterior: 0 h · Adicionales: 0 h';
     document.querySelector('#mRemaining').parentElement.querySelector('.sub').textContent = `Disponible para ${selectedMonth()}`;
-    $('dashboardActivities').innerHTML = '<p class="empty">Todavía no tienes ninguna empresa registrada. Ve a Configuración → Empresas y agrega la primera para empezar.</p>';
+    document.querySelector('#mValue').parentElement.querySelector('.sub').textContent = 'Tarifa vigente por hora';
+    $('dashboardActivities').innerHTML = `<p class="empty">${noSiteMessage()}</p>`;
     updateMonthProgressRadial(0, 0);
     return;
   }
@@ -348,6 +362,7 @@ function renderDashboard() {
   $('mValue').textContent = money(value);
   document.querySelector('#mAssigned').parentElement.querySelector('.sub').textContent = `Asignadas: ${bag.assigned} h · Saldo anterior: ${bag.carry} h · Adicionales: ${bag.additional} h`;
   document.querySelector('#mRemaining').parentElement.querySelector('.sub').textContent = `Disponible para ${m}`;
+  document.querySelector('#mValue').parentElement.querySelector('.sub').textContent = `Tarifa de ${company()?.name || 'la empresa'}: ${money(companyRate(company()))}/h`;
   updateMonthProgressRadial(bag.used, bag.total);
 
   const dashActs = activitiesForSite(s.id);
@@ -371,7 +386,7 @@ function renderDashboard() {
 
 function renderActivities() {
   const s = site();
-  if (!s) { $('activitiesList').innerHTML = '<p class="empty">Todavía no tienes ninguna empresa registrada. Ve a Configuración → Empresas y agrega la primera para empezar.</p>'; return; }
+  if (!s) { $('activitiesList').innerHTML = `<p class="empty">${noSiteMessage()}</p>`; return; }
   const m = selectedMonth();
   const acts = activitiesForSite(s.id);
   $('activitiesList').innerHTML = acts.length ? acts.map((t, i) => {
@@ -405,7 +420,7 @@ function completedActivityButton(siteId, activityId) {
 
 function renderHours() {
   const s = site();
-  if (!s) { $('hoursTable').innerHTML = '<tr><td colspan="10" class="empty">Todavía no tienes ninguna empresa registrada.</td></tr>'; return; }
+  if (!s) { $('hoursTable').innerHTML = `<tr><td colspan="10" class="empty">${noSiteMessage()}</td></tr>`; return; }
   const rows = state.hoursSite.filter(x => x.site_id === s.id).sort((a, b) => b.record_date.localeCompare(a.record_date));
   $('hoursTable').innerHTML = rows.length ? rows.map(x => {
     const closed = monthClosed(s.id, monthOf(x.record_date));
@@ -558,7 +573,7 @@ function openHoursModal() {
   $('hoursModalTitle').textContent = 'Registrar horas';
   $('hRate').disabled = true;
   fillCommon('hCompany', 'hSite', 'hTask'); $('hCompany').value = company().id; fillSiteSelect('hCompany', 'hSite'); $('hSite').value = site().id;
-  $('hDate').value = today(); $('hRate').value = state.rate; $('hHours').value = ''; $('hStatus').value = 'En proceso'; $('hTotal').value = ''; $('hNotes').value = '';
+  $('hDate').value = today(); $('hRate').value = companyRate(company()); $('hHours').value = ''; $('hStatus').value = 'En proceso'; $('hTotal').value = ''; $('hNotes').value = '';
   refreshHourTaskOptions(); updateHoursBagInfo(); openModal('hoursModal');
 }
 function editHours(id) {
@@ -574,7 +589,7 @@ function editHours(id) {
   $('hDate').value = r.record_date; $('hRate').value = r.rate; $('hHours').value = r.hours; $('hStatus').value = r.status; $('hTotal').value = money(r.hours * r.rate); $('hNotes').value = r.notes || '';
   updateHoursBagInfo(); openModal('hoursModal');
 }
-$('hHours')?.addEventListener('input', () => { $('hTotal').value = money(Number($('hHours').value || 0) * Number($('hRate').value || state.rate)); });
+$('hHours')?.addEventListener('input', () => { const c = state.companies.find(x => x.id === $('hCompany').value); $('hTotal').value = money(Number($('hHours').value || 0) * Number($('hRate').value || companyRate(c))); });
 $('hDate')?.addEventListener('change', updateHoursBagInfo);
 $('hCompany')?.addEventListener('change', () => { fillSiteSelect('hCompany', 'hSite'); refreshHourTaskOptions(); updateHoursBagInfo(); });
 $('hSite')?.addEventListener('change', () => { refreshHourTaskOptions(); updateHoursBagInfo(); });
@@ -605,12 +620,12 @@ async function saveHours() {
   if (wasEditing) {
     ({ error } = await sb.from('hour_records').update({
       company_id: c.id, site_id: s.id, activity_id: taskId, record_date: $('hDate').value,
-      hours: h, rate: Number($('hRate').value) || state.rate, status, notes: $('hNotes').value,
+      hours: h, rate: Number($('hRate').value) || companyRate(c), status, notes: $('hNotes').value,
     }).eq('id', editingHourId));
   } else {
     ({ error } = await sb.from('hour_records').insert({
       company_id: c.id, site_id: s.id, activity_id: taskId, record_date: $('hDate').value,
-      hours: h, rate: state.rate, status, notes: $('hNotes').value,
+      hours: h, rate: Number($('hRate').value) || companyRate(c), status, notes: $('hNotes').value,
       created_by: currentProfile?.id,
     }));
   }
@@ -715,7 +730,7 @@ async function saveActivity() {
     const hrStatus = status === 'Completado' ? 'Completado' : 'En proceso';
     const { error } = await sb.from('hour_records').insert({
       company_id: c.id, site_id: s.id, activity_id: tid, record_date: today(),
-      hours, rate: state.rate, status: hrStatus, notes: $('aNotes').value, source: 'avance', created_by: currentProfile?.id,
+      hours, rate: companyRate(c), status: hrStatus, notes: $('aNotes').value, source: 'avance', created_by: currentProfile?.id,
     });
     if (error) return toast('No se pudo guardar: ' + error.message);
     logActivity('hours_registered', `Se registraron ${hours} h en "${taskName(tid)}" (${s.name}) el ${today()}.`, { companyId: c.id, siteId: s.id });
@@ -777,7 +792,10 @@ function showConfig(tab, btn) {
 
 async function renderConfig() {
   const m = selectedMonth();
-  $('cfg-companies').innerHTML = `<div class="panelhead"><h2>Empresas</h2><button class="primary" data-requires-write onclick="openCompanyWizard()">+ Agregar empresa</button></div><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sedes</th><th></th></tr></thead><tbody>${state.companies.map(c => `<tr><td>${c.name}</td><td>${c.sites.length}</td><td><button class="danger" data-requires-write onclick="removeCompany('${c.id}')">Eliminar</button></td></tr>`).join('')}</tbody></table></div>`;
+  // Una empresa sin ninguna sede queda "inactiva" (se puede eliminar su
+  // última sede sin que eso borre la empresa) — se marca aquí para que se
+  // note de un vistazo que necesita una sede nueva para volver a operar.
+  $('cfg-companies').innerHTML = `<div class="panelhead"><h2>Empresas</h2><button class="primary" data-requires-write onclick="openCompanyWizard()">+ Agregar empresa</button></div><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sedes</th><th>Estado</th><th></th></tr></thead><tbody>${state.companies.map(c => `<tr><td>${c.name}</td><td>${c.sites.length}</td><td>${c.sites.length ? '<span class="badge done">Activa</span>' : '<span class="badge pending" title="Sin sedes: agrega una desde Sedes y horas para activarla">Inactiva</span>'}</td><td><button class="danger" data-requires-write onclick="removeCompany('${c.id}')">Eliminar</button></td></tr>`).join('')}</tbody></table></div>`;
 
   const rows = [];
   for (const c of state.companies) {
@@ -789,7 +807,11 @@ async function renderConfig() {
   }
   $('cfg-sites').innerHTML = `<div class="panelhead"><h2>Bolsas mensuales de horas</h2><div><button class="success" data-requires-write onclick="openMonthlyBagModal()">+ Asignar bolsa del mes</button> <button class="primary" data-requires-write onclick="openSiteWizard()">+ Agregar sede</button></div></div><p class="small">Periodo mostrado: <b>${m}</b>. El saldo no utilizado del mes anterior se suma automáticamente como saldo a favor.</p><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sede</th><th>Asignadas</th><th>Saldo anterior</th><th>Adicionales</th><th>Usadas</th><th>Disponibles</th><th>Acción</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 
-  $('cfg-rates').innerHTML = `<div class="panelhead"><h2>Tarifa de referencia</h2></div><div class="formgrid"><div><label>Valor por hora (COP)</label><input id="globalRate" type="number" value="${state.rate}"></div></div><div class="actions"><button class="primary" data-requires-write onclick="updateRate()">Guardar tarifa</button></div><p class="small">La tarifa configurada se propone para nuevos registros. Cada registro conserva su propia tarifa.</p>`;
+  // La tarifa es por EMPRESA, no global ni por sede: cada empresa tiene la
+  // suya propia, y se propone automáticamente al registrar horas nuevas de
+  // esa empresa. Cambiar esto no afecta los registros ya guardados (cada
+  // uno conserva la tarifa con la que se creó).
+  $('cfg-rates').innerHTML = `<div class="panelhead"><h2>Tarifas por empresa</h2></div><p class="small">Cada empresa tiene su propia tarifa por hora. Se propone para los registros nuevos de esa empresa; los ya guardados conservan la suya.</p><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Tarifa por hora (COP)</th><th></th></tr></thead><tbody>${state.companies.length ? state.companies.map(c => `<tr><td>${c.name}</td><td><input id="rate-${c.id}" type="number" min="0" step="1000" value="${companyRate(c)}" style="width:150px"></td><td><button class="primary" data-requires-write onclick="updateCompanyRate('${c.id}')">Guardar</button></td></tr>`).join('') : '<tr><td colspan="3" class="empty">Todavía no tienes ninguna empresa registrada.</td></tr>'}</tbody></table></div>`;
   $('cfg-tasks').innerHTML = `<div class="panelhead"><h2>Actividades del proyecto</h2><button class="primary" data-requires-write onclick="addTaskPrompt()">+ Nueva actividad</button></div>${state.activities.map(t => `<div class="activity"><div class="activityTop"><div><b>${t.name}</b>${t.is_fixed ? '<div class="small">Actividad inicial establecida</div>' : '<div class="small">Actividad agregada</div>'}</div><button class="secondary" data-requires-write onclick="editTaskPrompt('${t.id}')">✏️ Editar nombre</button></div></div>`).join('')}`;
 }
 
@@ -895,7 +917,7 @@ async function wizardSave() {
     let companyId, companyName, companyWasCreated = false;
     if (wizardMode === 'company') {
       companyName = $('wizCompanyName').value.trim();
-      const { data, error } = await sb.from('companies').insert({ name: companyName }).select('id').single();
+      const { data, error } = await sb.from('companies').insert({ name: companyName, rate: state.rate }).select('id').single();
       if (error && error.code === PG_UNIQUE_VIOLATION) {
         const { data: existing, error: findError } = await sb.from('companies').select('id').eq('name', companyName).maybeSingle();
         if (findError || !existing) return toast('Ya existe una empresa con ese nombre, pero no se pudo recuperar: ' + (findError?.message || 'sin detalle'));
@@ -1139,8 +1161,28 @@ async function saveAdditionalHours() {
   if (error) return toast(error.message);
   closeModal('addHoursModal'); await refreshAll(); toast(`Se agregaron ${amount} h adicionales a ${m}.`);
 }
-async function removeSite(cid, sid) { const c = state.companies.find(x => x.id === cid); if (c.sites.length <= 1) return toast('La empresa debe conservar al menos una sede'); if (confirm('¿Eliminar sede?')) { const { error } = await sb.from('sites').delete().eq('id', sid); if (error) return toast(error.message); await init(); } }
-async function updateRate() { const v = Number($('globalRate').value || 0); const { error } = await sb.from('app_settings').upsert({ key: 'default_rate', value: v }); if (error) return toast(error.message); state.rate = v; toast('Tarifa actualizada'); }
+// Una empresa SÍ puede quedarse sin ninguna sede (queda "inactiva" hasta que
+// se le agregue una nueva) — a diferencia de antes, ya no se bloquea borrar
+// la última sede de una empresa.
+async function removeSite(cid, sid) {
+  const c = state.companies.find(x => x.id === cid);
+  const isLast = c && c.sites.length <= 1;
+  const msg = isLast
+    ? `¿Eliminar esta sede? Es la última de "${c?.name || 'la empresa'}" — al borrarla, la empresa quedará inactiva (sin sedes) hasta que le agregues una nueva desde Configuración.`
+    : '¿Eliminar sede?';
+  if (confirm(msg)) { const { error } = await sb.from('sites').delete().eq('id', sid); if (error) return toast(error.message); await init(); }
+}
+async function updateCompanyRate(id) {
+  const input = $('rate-' + id);
+  const v = Number(input?.value || 0);
+  if (!(v > 0)) return toast('Ingresa una tarifa válida.');
+  const { error } = await sb.from('companies').update({ rate: v }).eq('id', id);
+  if (error) return toast('No se pudo actualizar: ' + error.message);
+  const c = state.companies.find(x => x.id === id);
+  if (c) c.rate = v;
+  toast(`Tarifa actualizada para ${c?.name || 'la empresa'}.`);
+  renderDashboard();
+}
 async function addTaskPrompt() { const n = prompt('Nombre de la nueva actividad:'); if (!n?.trim()) return; const { error } = await sb.from('activities').insert({ name: n.trim(), is_fixed: false }); if (error) return toast(error.message); logActivity('activities_loaded', `Se agregó la actividad "${n.trim()}" al catálogo.`); await init(); toast('Actividad agregada'); }
 // Corrige el nombre de una actividad del catálogo (por ejemplo, si quedó mal
 // escrita al crearla). Cambia el nombre en todas las sedes donde ya está

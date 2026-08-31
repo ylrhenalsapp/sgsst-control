@@ -33,7 +33,7 @@ function generateReport() {
     const paidCount = rows.filter(x => x.paid).length, owedCount = rows.length - paidCount;
     const monthValue = monthly.reduce((a, x) => a + Number(x.hours) * Number(x.rate), 0);
 
-    const bag = state.bag, bagRemainingValue = bag.remaining * Number(state.rate || 0);
+    const bag = state.bag, bagRemainingValue = bag.remaining * companyRate(c);
     const ev = state.evidencesSite.filter(x => scope === 'global' || monthOf(x.record_date) === m);
     const acts = state.activities.map((t, i) => {
       const st = taskStatus(s.id, t.id), hrs = scope === 'global' ? taskHours(s.id, t.id) : taskMonthHours(s.id, t.id, m);
@@ -64,7 +64,7 @@ function generateReport() {
           ['VALOR PENDIENTE', '–', money(owedValue)],
         ]
       : [
-          ['Horas asignadas', `${bag.total} h`, money(bag.total * Number(state.rate || 0))],
+          ['Horas asignadas', `${bag.total} h`, money(bag.total * companyRate(c))],
           ['Horas ejecutadas', `${used} h`, money(executed)],
           ['Horas disponibles', `${bag.remaining} h`, money(bagRemainingValue)],
           ['Valor pagado', '–', money(paidValue)],
