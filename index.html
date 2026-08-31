@@ -5,6 +5,47 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Control SG-SST | Gestión de Horas y Evidencias</title>
 
+<!--
+  Control de versión para forzar actualización automática.
+  Cada vez que se publica un cambio, este valor se actualiza al momento del
+  despliegue. El script de abajo compara este valor contra el que trae la
+  copia más reciente publicada (consultada sin usar caché) y, si detecta que
+  hay una versión más nueva, recarga la página sola — así ningún dispositivo
+  (celular, otra sesión abierta, etc.) se queda pegado en una versión vieja
+  esperando que alguien limpie el caché a mano.
+-->
+<meta name="build-version" content="2026-08-31T17:48:23Z">
+<script>
+(function () {
+  var CURRENT = document.querySelector('meta[name="build-version"]')?.content || '';
+  var SEEN_KEY = 'sgsst_reloaded_for_version';
+  function checkForUpdate() {
+    fetch('/index.html?_=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        var m = html.match(/<meta name="build-version" content="([^"]+)">/);
+        var latest = m ? m[1] : null;
+        if (!latest || latest === CURRENT) return;
+        // Evita recargar en bucle si por algún motivo la copia consultada
+        // sigue sin coincidir después de recargar una vez (ej. un borde de
+        // CDN desactualizado): solo se recarga una vez por versión detectada.
+        var alreadyReloadedFor = null;
+        try { alreadyReloadedFor = sessionStorage.getItem(SEEN_KEY); } catch (e) {}
+        if (alreadyReloadedFor === latest) return;
+        try { sessionStorage.setItem(SEEN_KEY, latest); } catch (e) {}
+        location.reload();
+      })
+      .catch(function () { /* si falla la verificación, no se interrumpe nada */ });
+  }
+  // Al entrar o recargar normalmente.
+  checkForUpdate();
+  // Al volver de segundo plano — el caso típico en celulares: se cambia de
+  // app y se regresa sin que el navegador vuelva a cargar nada por su cuenta.
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) checkForUpdate(); });
+  window.addEventListener('pageshow', function (e) { if (e.persisted) checkForUpdate(); });
+})();
+</script>
+
 <link rel="stylesheet" href="assets/css/app.css">
 
 </head>
