@@ -7,6 +7,44 @@
  */
 function scheduleCompanyChanged() { fillSiteSelect('scCompany', 'scSite'); }
 
+// ---------------------------------------------------------------------------
+// "Ver todas las citas": por defecto el calendario (agenda del día y vista
+// visual) solo muestra las citas de la empresa/sede que está seleccionada
+// arriba en los filtros — igual que el resto del panel. Este botón permite
+// ver TODAS las citas programadas sin importar la empresa, en cualquiera de
+// las vistas del calendario (día, lista, mes/semana/día de FullCalendar),
+// sin tener que ir cambiando de sede una por una.
+// ---------------------------------------------------------------------------
+let calendarShowAll = false;
+let allCalendarEvents = [];
+async function loadAllCalendarEvents() {
+  const { data, error } = await sb.from('schedule_events').select('*');
+  allCalendarEvents = error ? [] : (data || []);
+}
+function currentCalendarEvents() { return calendarShowAll ? allCalendarEvents : state.calendarSite; }
+function updateCalendarShowAllButton() {
+  const btn = $('calendarShowAllBtn');
+  if (!btn) return;
+  btn.textContent = calendarShowAll ? '👁️ Ver solo esta sede' : '👁️ Ver todas las citas';
+  btn.classList.toggle('calToggleActive', calendarShowAll);
+}
+async function toggleCalendarShowAll() {
+  calendarShowAll = !calendarShowAll;
+  if (calendarShowAll) await loadAllCalendarEvents();
+  updateCalendarShowAllButton();
+  renderCalendar();
+  renderFullCalendar();
+}
+// Mientras "Ver todas las citas" está activo, hay que mantener esa lista al
+// día cada vez que se recargan los datos (por ejemplo, tras programar o
+// reprogramar una cita) — si no, se podría quedar viendo una copia vieja.
+async function refreshCalendarShowAll() {
+  if (!calendarShowAll) return;
+  await loadAllCalendarEvents();
+  renderCalendar();
+  renderFullCalendar();
+}
+
 function openScheduleModal() {
   if (!company() || !site()) return toast('Primero agrega una empresa y una sede desde Configuración.');
   fillCommon('scCompany', 'scSite', 'scTask');
@@ -96,7 +134,7 @@ async function deleteSchedule(id) { if (!confirm('¿Eliminar esta programación 
 // evento en la lista del día.
 // ---------------------------------------------------------------------------
 function showEventInfo(id) {
-  const e = state.calendarSite.find(x => x.id === id);
+  const e = currentCalendarEvents().find(x => x.id === id);
   if (!e) return;
   const c = state.companies.find(x => x.id === e.company_id), s = c?.sites.find(x => x.id === e.site_id);
   $('eventInfoBody').innerHTML = `
@@ -121,14 +159,15 @@ function showEventInfo(id) {
 function renderCalendar() {
   if (!$('calendarDate')) return;
   const date = $('calendarDate').value || today();
-  const events = state.calendarSite.filter(e => e.event_date === date).sort((a, b) => a.event_time.localeCompare(b.event_time));
-  $('calendarDayCount').textContent = `${events.length} sesión${events.length === 1 ? '' : 'es'}`;
+  const source = currentCalendarEvents();
+  const events = source.filter(e => e.event_date === date).sort((a, b) => a.event_time.localeCompare(b.event_time));
+  $('calendarDayCount').textContent = `${events.length} ${events.length === 1 ? 'sesión' : 'sesiones'}${calendarShowAll ? ' · todas las empresas' : ''}`;
   $('calendarDayList').innerHTML = events.length ? events.map(e => {
     const c = state.companies.find(x => x.id === e.company_id), s = c?.sites.find(x => x.id === e.site_id);
     return `<div class="dayEvent"><div class="time">${e.event_time} · ${e.duration_minutes} min</div><div class="title">${taskName(e.activity_id)}</div><div class="small">${c?.name || ''} · ${s?.name || ''}</div><div class="small">👤 ${e.leader_name || 'Sin líder registrado'}${e.leader_email ? ' · ' + e.leader_email : ''}</div><div class="small">🔔 Recordatorio: ${e.reminder_minutes >= 1440 ? '1 día antes' : e.reminder_minutes + ' min antes'}</div><div style="margin-top:10px;display:flex;gap:7px;flex-wrap:wrap"><button class="secondary" onclick='window.open(googleCalendarUrl(${JSON.stringify(e)}),"_blank")'>Google Calendar</button><button class="secondary" onclick="prepareScheduleEmail('${e.id}')">📩 Correo</button><button class="secondary" onclick="downloadICS('${e.id}')">🔔 .ics</button><button class="danger" data-requires-write onclick="deleteSchedule('${e.id}')">Eliminar</button></div></div>`;
-  }).join('') : '<div class="calendarEmpty">No tienes sesiones programadas para este día. Tu agenda está disponible. ✨</div>';
-  const all = state.calendarSite.filter(e => e.event_date === date);
-  $('availabilityBox').innerHTML = `<div class="availabilityCard"><b>${formatDate(date)}</b><p class="small">${all.length ? 'Tienes ' + all.length + ' bloque(s) de tiempo ocupados en tu agenda interna.' : 'No tienes actividades programadas. Día disponible para nuevas sesiones.'}</p><div class="small"><b>Nota:</b> esta disponibilidad corresponde a las actividades registradas dentro de esta plataforma. Al usar "Google Calendar" puedes agregar la sesión a tu agenda personal.</div></div>`;
+  }).join('') : `<div class="calendarEmpty">No tienes sesiones programadas para este día${calendarShowAll ? ' (en ninguna empresa)' : ''}. Tu agenda está disponible. ✨</div>`;
+  const all = source.filter(e => e.event_date === date);
+  $('availabilityBox').innerHTML = `<div class="availabilityCard"><b>${formatDate(date)}</b><p class="small">${all.length ? 'Tienes ' + all.length + ' bloque(s) de tiempo ocupados en tu agenda interna.' : 'No tienes actividades programadas. Día disponible para nuevas sesiones.'}</p><div class="small"><b>Nota:</b> esta disponibilidad corresponde a las actividades registradas dentro de esta plataforma${calendarShowAll ? ', de todas las empresas' : ''}. Al usar "Google Calendar" puedes agregar la sesión a tu agenda personal.</div></div>`;
 }
 
 function scheduleBrowserReminder(e) {
@@ -158,13 +197,19 @@ function calendarSectionVisible() {
 function renderFullCalendar() {
   const el = $('fullCalendarEl');
   if (!el || typeof FullCalendar === 'undefined') return;
-  const events = state.calendarSite.map(e => ({
-    id: e.id,
-    title: taskName(e.activity_id),
-    start: `${e.event_date}T${e.event_time}`,
-    end: eventEnd(e).toISOString(),
-    color: e.google_calendar_synced ? '#2f8a63' : '#2f658e',
-  }));
+  // Con "Ver todas las citas" activo, el título de cada evento incluye la
+  // empresa — si no, en la vista de mes/semana no habría forma de distinguir
+  // de qué empresa es cada bloque.
+  const events = currentCalendarEvents().map(e => {
+    const c = calendarShowAll ? state.companies.find(x => x.id === e.company_id) : null;
+    return {
+      id: e.id,
+      title: c ? `${taskName(e.activity_id)} · ${c.name}` : taskName(e.activity_id),
+      start: `${e.event_date}T${e.event_time}`,
+      end: eventEnd(e).toISOString(),
+      color: e.google_calendar_synced ? '#2f8a63' : '#2f658e',
+    };
+  });
   if (!fullCalendarInstance && !calendarSectionVisible()) { pendingCalendarEvents = events; return; }
   if (!fullCalendarInstance) {
     fullCalendarInstance = new FullCalendar.Calendar(el, {

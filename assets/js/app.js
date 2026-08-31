@@ -207,6 +207,7 @@ async function refreshAll() {
     renderNotifBell();
     renderMiniCalendar();
     if (typeof renderFullCalendar === 'function') renderFullCalendar();
+    if (typeof refreshCalendarShowAll === 'function') await refreshCalendarShowAll();
     return;
   }
 
@@ -245,6 +246,7 @@ async function refreshAll() {
   renderNotifBell();
   renderMiniCalendar();
   if (typeof renderFullCalendar === 'function') renderFullCalendar();
+  if (typeof refreshCalendarShowAll === 'function') await refreshCalendarShowAll();
 }
 
 // ---------------------------------------------------------------------------

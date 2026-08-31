@@ -14,7 +14,7 @@
   (celular, otra sesión abierta, etc.) se queda pegado en una versión vieja
   esperando que alguien limpie el caché a mano.
 -->
-<meta name="build-version" content="2026-08-31T17:48:23Z">
+<meta name="build-version" content="2026-08-31T22:34:00Z">
 <script>
 (function () {
   var CURRENT = document.querySelector('meta[name="build-version"]')?.content || '';
@@ -188,6 +188,7 @@
       <div><label style="color:#fff">Fecha a consultar</label><input id="calendarDate" type="date" onchange="renderCalendar()"></div>
       <button class="success" data-requires-write onclick="openScheduleModal()">+ Programar actividad</button>
       <button class="secondary" onclick="renderCalendar()">↻ Actualizar agenda</button>
+      <button id="calendarShowAllBtn" class="secondary" onclick="toggleCalendarShowAll()">👁️ Ver todas las citas</button>
     </div>
   </div>
   <div class="panel" style="margin-bottom:18px">
