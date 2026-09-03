@@ -18,6 +18,8 @@ function monthLabel(m) {
 }
 
 function generateReport() {
+  const scopeSel = $('reportScope')?.value || 'monthly';
+  if (scopeSel === 'all') { renderGlobalReport(); return null; }
   try {
     const c = company(), s = site();
     if (!c || !s) { toast('Selecciona empresa y sede antes de generar el informe.'); return null; }
@@ -177,9 +179,118 @@ function generateReport() {
   }
 }
 
-function prepareEmail() {
-  const r = lastReport || generateReport();
+// Informe general: junta TODAS las empresas y sedes en un solo documento
+// (avance actual + cartera consolidada), en vez del histórico de una sola
+// sede. Usa el mismo cálculo que el panel "Resumen general" del Dashboard
+// (computeGlobalOverview, definido en app.js) para que ambos coincidan
+// siempre. Es async porque tiene que consultar la bolsa de cada sede.
+async function renderGlobalReport() {
+  const box = $('reportBox');
+  if (box) box.innerHTML = '<p class="empty">Generando informe general, un momento…</p>';
+  toast('Generando informe general…');
+  try {
+    const m = $('reportMonth')?.value || selectedMonth();
+    const { rows, totals } = await computeGlobalOverview(m);
+    const title = 'Informe general consolidado SG-SST';
+    const subtitle = 'Avance actual y cartera de todas las empresas y sedes.';
+    const genDate = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    if (!rows.length) {
+      if (box) box.innerHTML = '<p class="empty">Todavía no hay empresas con sedes registradas.</p>';
+      lastReport = null;
+      return null;
+    }
+
+    const finRows = [
+      ['Horas asignadas', `${totals.assigned} h`, ''],
+      ['Horas ejecutadas', `${totals.used} h`, ''],
+      ['Horas disponibles', `${totals.remaining} h`, ''],
+      ['Valor pagado', '–', money(totals.paidValue)],
+      ['VALOR PENDIENTE', '–', money(totals.owedValue)],
+    ];
+
+    if (box) box.innerHTML = `
+    <div class="reportTopBar">
+      <div class="reportBrand">
+        <img src="${REPORT_LOGO_B64}" alt="SST Asesorías y Consultorías">
+        <div class="reportBrandText"><h2>${title.toUpperCase()}</h2><p>${subtitle}</p></div>
+      </div>
+      <div class="reportInfoBox">
+        <span class="lbl">Alcance:</span><span class="val">Todas las empresas y sedes</span>
+        <span class="lbl">Periodo:</span><span class="val">${monthLabel(m)}</span>
+        <span class="lbl">Generado el:</span><span class="val">${genDate}</span>
+        <span class="lbl">Responsable:</span><span class="val">Yasbleidis López Rhenals</span>
+      </div>
+    </div>
+
+    <div class="reportSectionTitle">📊 1. Resumen ejecutivo</div>
+    <div class="reportKpiRow">
+      <div class="reportKpiCard c-blue"><div class="k-label">Empresas activas</div><div class="k-value">${totals.companiesCount}</div><div class="k-sub">${totals.sitesCount} sede(s) en total</div></div>
+      <div class="reportKpiCard c-blue"><div class="k-label">Horas ejecutadas</div><div class="k-value">${totals.used} h</div><div class="k-sub">De un total de ${totals.assigned} h asignadas</div></div>
+      <div class="reportKpiCard c-green"><div class="k-label">Avance global</div><div class="k-value">${totals.avancePct === null ? '—' : totals.avancePct + '%'}</div><div class="k-sub">${totals.used} h de ${totals.assigned} h</div></div>
+      <div class="reportKpiCard c-orange"><div class="k-label">Valor pendiente de pago</div><div class="k-value">${money(totals.owedValue)}</div><div class="k-sub">Cartera consolidada</div></div>
+      <div class="reportKpiCard c-purple"><div class="k-label">Horas disponibles</div><div class="k-value">${totals.remaining} h</div><div class="k-sub">Saldo consolidado de todas las bolsas</div></div>
+    </div>
+
+    <div class="reportSectionTitle" style="margin-top:22px">📋 2. Resumen financiero consolidado</div>
+    <div class="tablewrap"><table><thead><tr><th>Concepto</th><th>Horas</th><th>Valor</th></tr></thead><tbody>
+      ${finRows.map(r => `<tr${r[0] === 'VALOR PENDIENTE' ? ' style="background:#fdf1ef"' : ''}><td${r[0] === 'VALOR PENDIENTE' ? ' style="color:var(--danger);font-weight:800"' : ''}>${r[0]}</td><td>${r[1]}</td><td${r[0] === 'VALOR PENDIENTE' ? ' style="color:var(--danger);font-weight:800"' : ''}>${r[2]}</td></tr>`).join('')}
+    </tbody></table></div>
+
+    <div class="reportSectionTitle" style="margin-top:22px">🏢 3. Avance actual por empresa y sede</div>
+    <div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sede</th><th>Asignadas</th><th>Usadas</th><th>Disponibles</th><th>Avance</th><th>Cartera</th></tr></thead><tbody>
+      ${rows.map(r => `<tr><td>${r.companyName}</td><td>${r.siteName}</td><td>${r.assigned} h</td><td>${r.used} h</td><td>${r.remaining} h</td><td>${r.avancePct === null ? '—' : r.avancePct + '%'}</td><td>${r.owedValue > 0 ? `<span class="badge unpaid">${money(r.owedValue)}</span>` : '<span class="badge paid">Al día</span>'}</td></tr>`).join('')}
+      <tr style="font-weight:800;background:#f4f7fa"><td colspan="2">TOTAL</td><td>${totals.assigned} h</td><td>${totals.used} h</td><td>${totals.remaining} h</td><td>${totals.avancePct === null ? '—' : totals.avancePct + '%'}</td><td>${money(totals.owedValue)}</td></tr>
+    </tbody></table></div>
+
+    <div class="reportGrid2" style="margin-top:22px">
+      <div>
+        <div class="reportSectionTitle">✍️ Elaborado por</div>
+        <div class="reportSignatureBlock"><img src="${REPORT_SIGNATURE_B64}" alt="Yasbleidis López Rhenals · SST Asesorías y Consultorías"></div>
+      </div>
+    </div>
+    `;
+    toast('Informe general generado');
+    lastReport = { scope: 'all', m, rows, totals, title, subtitle, genDate };
+    return lastReport;
+  } catch (err) {
+    console.error('Error generando el informe general:', err);
+    toast('No se pudo generar el informe general: ' + (err?.message || err));
+    if (box) box.innerHTML = '<p class="empty">No se pudo generar el informe general.</p>';
+    return null;
+  }
+}
+
+// Los botones de Exportar/Correo confían en "lastReport" (ya generado por el
+// último cambio de filtro/scope, que dispara generateReport() automático).
+// Si por alguna carrera async lastReport todavía no está listo para el
+// informe general (recién se cambió a "todas las empresas" y las consultas
+// no han vuelto), se espera aquí en vez de fallar en silencio.
+async function ensureReport() {
+  const scope = $('reportScope')?.value || 'monthly';
+  if (scope === 'all') return (lastReport && lastReport.scope === 'all') ? lastReport : await renderGlobalReport();
+  return (lastReport && lastReport.scope !== 'all') ? lastReport : generateReport();
+}
+
+async function prepareEmail() {
+  const r = await ensureReport();
   if (!r) return;
+  if (r.scope === 'all') {
+    const subject = encodeURIComponent(`Informe general SG-SST – Todas las empresas – ${r.m}`);
+    const body = encodeURIComponent(
+      `Cordial saludo,\n\n` +
+      `Compartimos el informe general consolidado de seguimiento para todas las empresas y sedes.\n\n` +
+      `Horas ejecutadas: ${r.totals.used} h de ${r.totals.assigned} h asignadas\n` +
+      `Avance global: ${r.totals.avancePct === null ? '—' : r.totals.avancePct + '%'}\n` +
+      `Valor pagado: ${money(r.totals.paidValue)}\n` +
+      `Valor pendiente por cobrar: ${money(r.totals.owedValue)}\n` +
+      `Saldo disponible consolidado: ${r.totals.remaining} h\n\n` +
+      `Adjunto el informe completo en PDF/Word exportado desde la plataforma.\n\n` +
+      `Cordialmente,\nYasbleidis López Rhenals`
+    );
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    return;
+  }
   const subject = encodeURIComponent(`Informe ${r.scope === 'global' ? 'global' : 'mensual'} SG-SST – ${r.s.name} – ${r.m}`);
   const body = encodeURIComponent(
     `Cordial saludo,\n\n` +
@@ -213,13 +324,13 @@ function stripEmojiForPdf(html) {
 // probado: ~40 veces menos peso con la misma calidad visual) sin correr el
 // riesgo original de que la transparencia se pintara negra.
 async function exportReportPDF() {
-  const r = lastReport || generateReport();
+  const r = await ensureReport();
   if (!r) return;
   const el = $('reportBox');
   if (!el) return;
   if (typeof html2canvas === 'undefined' || !window.jspdf) { toast('No se pudo cargar el generador de PDF. Recarga la página e intenta de nuevo.'); return; }
   const { jsPDF } = window.jspdf;
-  const filename = `informe-sgsst-${r.s.name.replace(/\s+/g, '_')}-${r.m}.pdf`;
+  const filename = r.scope === 'all' ? `informe-general-sgsst-${r.m}.pdf` : `informe-sgsst-${r.s.name.replace(/\s+/g, '_')}-${r.m}.pdf`;
   toast('Generando PDF, un momento…');
 
   const originalHtml = el.innerHTML;
@@ -268,8 +379,8 @@ async function exportReportPDF() {
 // Excel: usa el mismo contenido del informe en pantalla, con estilos en
 // línea compatibles con Word, para que sea fácil de retocar antes de
 // enviarlo (títulos, tablas y colores de estado se conservan).
-function exportReportWord() {
-  const r = lastReport || generateReport();
+async function exportReportWord() {
+  const r = await ensureReport();
   if (!r) return;
   const el = $('reportBox');
   if (!el) return;
@@ -296,7 +407,7 @@ function exportReportWord() {
   const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `informe-sgsst-${r.s.name.replace(/\s+/g, '_')}-${r.m}.doc`;
+  a.download = r.scope === 'all' ? `informe-general-sgsst-${r.m}.doc` : `informe-sgsst-${r.s.name.replace(/\s+/g, '_')}-${r.m}.doc`;
   a.click();
   URL.revokeObjectURL(a.href);
 }

@@ -82,6 +82,87 @@ function activitiesForSite(siteId) {
 }
 function monthClosed(siteId, month) { return state.closedMonths.has(`${siteId}|${month}`); }
 
+// ---------------------------------------------------------------------------
+// Resumen general (todas las empresas/sedes juntas, no solo la seleccionada).
+// Usado por el panel del Dashboard y por el "Informe general" de Informes.
+// Independiente del filtro de empresa/sede de arriba: siempre recorre TODAS
+// las sedes de TODAS las empresas para el mes recibido.
+// ---------------------------------------------------------------------------
+async function computeGlobalOverview(month) {
+  const m = month || selectedMonth();
+  const [y, mm] = m.split('-').map(Number);
+  const nextMonth = `${new Date(y, mm, 1).toISOString().slice(0, 7)}-01`; // mm ya es 1-indexado -> mes siguiente
+
+  const allSites = [];
+  state.companies.forEach(c => (c.sites || []).forEach(s => allSites.push({ company: c, site: s })));
+  if (!allSites.length) return { month: m, rows: [], totals: null };
+
+  const [bagResults, { data: hoursRows }] = await Promise.all([
+    Promise.all(allSites.map(({ site: s }) =>
+      sb.rpc('get_bag_summary', { p_site_id: s.id, p_month: `${m}-01` })
+        .then(({ data }) => (data && data[0]) || { assigned: 0, additional: 0, carry: 0, total: 0, used: 0, remaining: 0 })
+        .catch(() => ({ assigned: 0, additional: 0, carry: 0, total: 0, used: 0, remaining: 0 }))
+    )),
+    sb.from('hour_records').select('site_id,hours,rate,paid').gte('record_date', `${m}-01`).lt('record_date', nextMonth),
+  ]);
+
+  const bySite = {};
+  (hoursRows || []).forEach(h => {
+    const k = h.site_id;
+    if (!bySite[k]) bySite[k] = { paid: 0, owed: 0 };
+    const val = Number(h.hours) * Number(h.rate);
+    if (h.paid) bySite[k].paid += val; else bySite[k].owed += val;
+  });
+
+  const rows = allSites.map(({ company: c, site: s }, i) => {
+    const bag = bagResults[i];
+    const cartera = bySite[s.id] || { paid: 0, owed: 0 };
+    return {
+      companyId: c.id, companyName: c.name, siteId: s.id, siteName: s.name,
+      assigned: bag.total, used: bag.used, remaining: bag.remaining,
+      avancePct: bag.total ? Math.min(100, Math.round(100 * bag.used / bag.total)) : null,
+      paidValue: cartera.paid, owedValue: cartera.owed,
+    };
+  });
+
+  const totals = rows.reduce((a, r) => ({
+    assigned: a.assigned + r.assigned, used: a.used + r.used, remaining: a.remaining + r.remaining,
+    paidValue: a.paidValue + r.paidValue, owedValue: a.owedValue + r.owedValue,
+  }), { assigned: 0, used: 0, remaining: 0, paidValue: 0, owedValue: 0 });
+  totals.avancePct = totals.assigned ? Math.min(100, Math.round(100 * totals.used / totals.assigned)) : null;
+  totals.companiesCount = new Set(rows.map(r => r.companyId)).size;
+  totals.sitesCount = rows.length;
+
+  return { month: m, rows, totals };
+}
+
+async function renderGlobalOverview() {
+  const box = $('globalOverviewBox');
+  if (!box) return;
+  const m = selectedMonth();
+  if ($('globalOverviewPeriod')) $('globalOverviewPeriod').textContent = typeof monthLabel === 'function' ? monthLabel(m) : m;
+  try {
+    const { rows, totals } = await computeGlobalOverview(m);
+    if (!rows.length) {
+      box.innerHTML = '<p class="empty">Todavía no tienes ninguna sede registrada. Agrega una empresa y una sede desde Configuración para ver aquí el resumen general.</p>';
+      return;
+    }
+    box.innerHTML = `
+      <div class="reportKpiRow" style="margin-bottom:14px">
+        <div class="reportKpiCard c-blue"><div class="k-label">Empresas activas</div><div class="k-value">${totals.companiesCount}</div><div class="k-sub">${totals.sitesCount} sede(s) en total</div></div>
+        <div class="reportKpiCard c-blue"><div class="k-label">Horas asignadas</div><div class="k-value">${totals.assigned} h</div><div class="k-sub">Bolsa del mes, todas las sedes</div></div>
+        <div class="reportKpiCard c-green"><div class="k-label">Avance global</div><div class="k-value">${totals.avancePct === null ? '—' : totals.avancePct + '%'}</div><div class="k-sub">${totals.used} h ejecutadas de ${totals.assigned} h</div></div>
+        <div class="reportKpiCard ${totals.owedValue > 0 ? 'c-orange' : 'c-green'}"><div class="k-label">Cartera pendiente</div><div class="k-value">${money(totals.owedValue)}</div><div class="k-sub">${totals.owedValue > 0 ? 'Por cobrar' : 'Al día'}</div></div>
+      </div>
+      <div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sede</th><th>Asignadas</th><th>Usadas</th><th>Disponibles</th><th>Avance</th><th>Cartera</th></tr></thead><tbody>
+        ${rows.map(r => `<tr><td>${r.companyName}</td><td>${r.siteName}</td><td>${r.assigned} h</td><td>${r.used} h</td><td><b>${r.remaining} h</b></td><td>${r.avancePct === null ? '—' : r.avancePct + '%'}</td><td>${r.owedValue > 0 ? `<span class="badge unpaid">${money(r.owedValue)}</span>` : '<span class="badge paid">Al día</span>'}</td></tr>`).join('')}
+      </tbody></table></div>`;
+  } catch (err) {
+    console.error('Error cargando el resumen general:', err);
+    box.innerHTML = '<p class="empty">No se pudo cargar el resumen general.</p>';
+  }
+}
+
 function taskStatus(siteId, activityId) { return state.statusMap[`${siteId}|${activityId}`] || 'Pendiente'; }
 function taskIsCompleted(siteId, activityId) { return taskStatus(siteId, activityId) === 'Completada'; }
 function taskHours(siteId, activityId) { return state.hoursSite.filter(h => h.site_id === siteId && h.activity_id === activityId).reduce((a, x) => a + Number(x.hours), 0); }
@@ -208,6 +289,7 @@ async function refreshAll() {
     renderMiniCalendar();
     if (typeof renderFullCalendar === 'function') renderFullCalendar();
     if (typeof refreshCalendarShowAll === 'function') await refreshCalendarShowAll();
+    renderGlobalOverview();
     return;
   }
 
@@ -247,6 +329,7 @@ async function refreshAll() {
   renderMiniCalendar();
   if (typeof renderFullCalendar === 'function') renderFullCalendar();
   if (typeof refreshCalendarShowAll === 'function') await refreshCalendarShowAll();
+  renderGlobalOverview();
 }
 
 // ---------------------------------------------------------------------------
