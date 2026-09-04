@@ -165,8 +165,15 @@ async function renderGlobalOverview() {
 
 function taskStatus(siteId, activityId) { return state.statusMap[`${siteId}|${activityId}`] || 'Pendiente'; }
 function taskIsCompleted(siteId, activityId) { return taskStatus(siteId, activityId) === 'Completada'; }
-function taskHours(siteId, activityId) { return state.hoursSite.filter(h => h.site_id === siteId && h.activity_id === activityId).reduce((a, x) => a + Number(x.hours), 0); }
-function taskMonthHours(siteId, activityId, m) { return state.hoursSite.filter(h => h.site_id === siteId && h.activity_id === activityId && monthOf(h.record_date) === m).reduce((a, x) => a + Number(x.hours), 0); }
+// hour_records (state.hoursSite) se carga normalmente solo de la sede
+// seleccionada — por eso, mientras el botón "Ver todas las empresas" de
+// Horas o de Actividades esté activo, estas dos funciones (usadas también
+// por el Dashboard y las tarjetas de Actividades de la sede seleccionada)
+// leen en cambio de allHoursRows (todas las sedes, superconjunto), para que
+// las horas de sedes que no son la seleccionada arriba salgan correctas.
+function hoursSource() { return (hoursShowAll || activitiesShowAll) && allHoursRows ? allHoursRows : state.hoursSite; }
+function taskHours(siteId, activityId) { return hoursSource().filter(h => h.site_id === siteId && h.activity_id === activityId).reduce((a, x) => a + Number(x.hours), 0); }
+function taskMonthHours(siteId, activityId, m) { return hoursSource().filter(h => h.site_id === siteId && h.activity_id === activityId && monthOf(h.record_date) === m).reduce((a, x) => a + Number(x.hours), 0); }
 // Registro de horas más reciente de una actividad (el que normalmente marcó
 // su cierre), usado para ofrecer "Editar horas" sobre actividades ya
 // completadas desde el Dashboard / Actividades.
@@ -264,6 +271,31 @@ async function refreshAll() {
   refreshSitesFilter();
   refreshActivityLog();
   if ($('reportMonth') && !$('reportMonth').value) $('reportMonth').value = selectedMonth();
+
+  // Estado (statusMap), metas (targetsMap) y cierres de mes (closedMonths)
+  // se cargan de TODAS las sedes de TODAS las empresas (no solo la
+  // seleccionada arriba): son tablas chicas, y cargarlas completas es lo
+  // que permite que "Ver todas las empresas" (Horas/Actividades) y el
+  // resumen general del Dashboard muestren el estado real de cualquier
+  // sede sin tener que ir sede por sede. hour_records (state.hoursSite)
+  // sigue cargándose solo de la sede seleccionada por defecto — esa sí
+  // puede crecer mucho — y solo se trae completa (allHoursRows) cuando se
+  // activa alguno de los botones "Ver todas las empresas".
+  const [{ data: statusRowsAll }, { data: targetRowsAll }, { data: closedRowsAll }] = await Promise.all([
+    sb.from('v_activity_current_status').select('*'),
+    sb.from('activity_targets').select('site_id,activity_id,target_hours'),
+    sb.from('month_closures').select('site_id,month').is('reopened_at', null),
+  ]);
+  state.statusMap = {};
+  (statusRowsAll || []).forEach(r => { state.statusMap[`${r.site_id}|${r.activity_id}`] = r.status; });
+  state.targetsMap = {};
+  (targetRowsAll || []).forEach(r => { state.targetsMap[`${r.site_id}|${r.activity_id}`] = Number(r.target_hours); });
+  state.closedMonths = new Set((closedRowsAll || []).map(r => `${r.site_id}|${r.month.slice(0, 7)}`));
+  if (hoursShowAll || activitiesShowAll) {
+    const { data: allHours } = await sb.from('hour_records').select('*');
+    allHoursRows = allHours || [];
+  }
+
   const s = site();
   if (!s) {
     // Todavía no hay ninguna empresa/sede creada (primera vez usando el
@@ -273,10 +305,8 @@ async function refreshAll() {
     // "+ Nueva actividad" — antes esta función se detenía aquí mismo y
     // Configuración se quedaba en blanco para siempre.
     state.hoursSite = []; state.evidencesSite = []; state.calendarSite = [];
-    state.statusMap = {}; state.targetsMap = {};
     state.bag = { assigned: 0, additional: 0, carry: 0, total: 0, used: 0, remaining: 0 };
     state.bagExists = false;
-    state.closedMonths = new Set();
     renderBagAlert();
     renderDashboard();
     renderActivities();
@@ -293,29 +323,20 @@ async function refreshAll() {
     return;
   }
 
-  // Las 7 consultas de esta sección tampoco dependen unas de otras, así que
-  // también van todas en paralelo (se agregó aquí la de "monthly_bags" que
-  // antes se pedía aparte, después de esperar todo lo anterior).
-  const [{ data: hours }, { data: evid }, { data: cal }, { data: statusRows }, { data: bagRow }, { data: targetRows }, { count }, { data: closedRows }] = await Promise.all([
+  // statusMap/targetsMap/closedMonths ya se cargaron arriba (todas las
+  // sedes). Aquí solo quedan las consultas propias de la sede seleccionada.
+  const [{ data: hours }, { data: evid }, { data: cal }, { data: bagRow }, { count }] = await Promise.all([
     sb.from('hour_records').select('*').eq('site_id', s.id),
     sb.from('evidences').select('*').eq('site_id', s.id).order('record_date', { ascending: false }),
     sb.from('schedule_events').select('*').eq('site_id', s.id),
-    sb.from('v_activity_current_status').select('*').eq('site_id', s.id),
     sb.rpc('get_bag_summary', { p_site_id: s.id, p_month: `${selectedMonth()}-01` }),
-    sb.from('activity_targets').select('activity_id,target_hours').eq('site_id', s.id),
     sb.from('monthly_bags').select('id', { count: 'exact', head: true }).eq('site_id', s.id).eq('month', `${selectedMonth()}-01`),
-    sb.from('month_closures').select('month').eq('site_id', s.id).is('reopened_at', null),
   ]);
   state.hoursSite = hours || [];
   state.evidencesSite = evid || [];
   state.calendarSite = cal || [];
-  state.statusMap = {};
-  (statusRows || []).forEach(r => { state.statusMap[`${r.site_id}|${r.activity_id}`] = r.status; });
-  state.targetsMap = {};
-  (targetRows || []).forEach(r => { state.targetsMap[`${s.id}|${r.activity_id}`] = Number(r.target_hours); });
   state.bag = (bagRow && bagRow[0]) || { assigned: 0, additional: 0, carry: 0, total: 0, used: 0, remaining: 0 };
   state.bagExists = !!count;
-  state.closedMonths = new Set((closedRows || []).map(r => `${s.id}|${r.month.slice(0, 7)}`));
 
   renderBagAlert();
   renderDashboard();
@@ -469,7 +490,44 @@ function renderDashboard() {
   }).join('') : '<p class="empty">Esta sede todavía no tiene actividades asignadas. Agrégalas desde Configuración → Actividades.</p>';
 }
 
+// ---------------------------------------------------------------------------
+// "Ver todas las empresas" (Actividades y Horas): dos botones independientes
+// (uno por sección), que comparten la misma carga de fondo — allHoursRows,
+// todos los hour_records sin filtrar por sede — para no duplicar la
+// consulta si ambos están activos a la vez. Mientras ninguno de los dos
+// esté activo, el comportamiento normal (una sola sede) no cambia en nada.
+// ---------------------------------------------------------------------------
+let hoursShowAll = false;
+let activitiesShowAll = false;
+let allHoursRows = null;
+
+async function ensureAllHoursLoaded() {
+  const { data } = await sb.from('hour_records').select('*');
+  allHoursRows = data || [];
+}
+
+async function toggleHoursShowAll() {
+  hoursShowAll = !hoursShowAll;
+  if (hoursShowAll && !allHoursRows) await ensureAllHoursLoaded();
+  updateShowAllButton('hoursShowAllBtn', hoursShowAll);
+  renderHours();
+}
+
+async function toggleActivitiesShowAll() {
+  activitiesShowAll = !activitiesShowAll;
+  if (activitiesShowAll && !allHoursRows) await ensureAllHoursLoaded();
+  updateShowAllButton('activitiesShowAllBtn', activitiesShowAll);
+  renderActivities();
+}
+
+function updateShowAllButton(id, active) {
+  const b = $(id); if (!b) return;
+  b.classList.toggle('calToggleActive', active);
+  b.textContent = active ? '👁️ Viendo todas las empresas' : '👁️ Ver todas las empresas';
+}
+
 function renderActivities() {
+  if (activitiesShowAll) { renderActivitiesAll(); return; }
   const s = site();
   if (!s) { $('activitiesList').innerHTML = `<p class="empty">${noSiteMessage()}</p>`; return; }
   const m = selectedMonth();
@@ -490,6 +548,30 @@ function renderActivities() {
   }).join('') : '<p class="empty">Esta sede todavía no tiene actividades asignadas. Agrégalas desde Configuración → Actividades.</p>';
 }
 
+// Vista consolidada: una fila por (empresa, sede, actividad asignada a esa
+// sede), con las mismas columnas que las tarjetas normales (horas
+// acumuladas, horas del mes, estado, avance) más Empresa y Sede al
+// principio. Usa exactamente las mismas funciones (taskStatus, taskHours,
+// activityProgressBar) que las tarjetas, así que nunca puede desincronizarse
+// de lo que se ve en la vista normal de una sola sede.
+function renderActivitiesAll() {
+  const m = selectedMonth();
+  const rows = [];
+  state.companies.forEach(c => (c.sites || []).forEach(s => {
+    activitiesForSite(s.id).forEach(t => {
+      const status = taskStatus(s.id, t.id);
+      rows.push({
+        companyName: c.name, siteName: s.name, siteId: s.id, activityId: t.id, name: t.name,
+        status, totalH: taskHours(s.id, t.id), monthH: taskMonthHours(s.id, t.id, m),
+      });
+    });
+  }));
+  if (!rows.length) { $('activitiesList').innerHTML = '<p class="empty">Todavía no hay actividades asignadas en ninguna sede. Agrégalas desde Configuración → Actividades.</p>'; return; }
+  $('activitiesList').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sede</th><th>Actividad</th><th>Estado</th><th>Acumuladas</th><th>Este mes</th><th>Avance</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td>${r.companyName}</td><td>${r.siteName}</td><td>${r.name}</td><td><span class="badge ${r.status === 'Completada' ? 'done' : r.status === 'En proceso' ? 'progress' : 'pending'}">${r.status}</span></td><td>${r.totalH} h</td><td>${r.monthH} h</td><td>${activityProgressBar(r.siteId, r.activityId, r.totalH)}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
 // Botón para una actividad ya "Completada": si tiene un registro de horas y
 // el mes de ese registro sigue abierto, deja editarlo (cambiar horas y
 // volver a guardar); si el mes ya está cerrado, se informa que está
@@ -504,11 +586,23 @@ function completedActivityButton(siteId, activityId) {
 }
 
 function renderHours() {
+  if (hoursShowAll) { renderHoursRows(allHoursRows || [], true); return; }
   const s = site();
   if (!s) { $('hoursTable').innerHTML = `<tr><td colspan="10" class="empty">${noSiteMessage()}</td></tr>`; return; }
-  const rows = state.hoursSite.filter(x => x.site_id === s.id).sort((a, b) => b.record_date.localeCompare(a.record_date));
+  renderHoursRows(state.hoursSite.filter(x => x.site_id === s.id), false);
+}
+
+// showAll=false: comportamiento de siempre (empresa/sede de la fila = la
+// seleccionada arriba, todas las filas son de esa sede).
+// showAll=true: cada fila puede ser de una empresa/sede distinta — se busca
+// en state.companies cuál es, para llenar la columna "Empresa / Sede".
+function renderHoursRows(sourceRows, showAll) {
+  const s = site();
+  const rows = [...sourceRows].sort((a, b) => b.record_date.localeCompare(a.record_date));
   $('hoursTable').innerHTML = rows.length ? rows.map(x => {
-    const closed = monthClosed(s.id, monthOf(x.record_date));
+    const c = showAll ? state.companies.find(cc => cc.id === x.company_id) : company();
+    const st = showAll ? c?.sites.find(ss => ss.id === x.site_id) : s;
+    const closed = monthClosed(x.site_id, monthOf(x.record_date));
     const editBtn = closed
       ? `<span class="small" title="El mes de este registro ya está cerrado">🔒 Cerrado</span>`
       : `<button class="secondary" data-requires-write onclick="editHours('${x.id}')">Editar</button>`;
@@ -516,8 +610,8 @@ function renderHours() {
     // acumuladas de todos sus registros / meta configurada), no solo de
     // este registro puntual — por eso se repite en cada fila de la misma
     // actividad, igual que en Dashboard y Actividades.
-    const avance = activityProgressBar(s.id, x.activity_id, taskHours(s.id, x.activity_id));
-    return `<tr><td>${x.record_date}</td><td>${company().name}<br><span class="small">${s.name}</span></td><td>${taskName(x.activity_id)}</td><td>${avance}</td><td><span class="badge ${x.status === 'Completado' ? 'done' : 'progress'}">${x.status}</span></td><td>${x.hours}</td><td>${money(x.rate)}</td><td>${money(x.hours * x.rate)}</td><td><button class="badge ${x.paid ? 'paid' : 'unpaid'}" data-requires-write onclick="togglePaid('${x.id}',${!x.paid})">${x.paid ? '✓ Pagado' : '⏳ Pendiente'}</button></td><td style="white-space:nowrap">${editBtn} <button class="danger" data-requires-write onclick="deleteItem('hour_records','${x.id}')">Eliminar</button></td></tr>`;
+    const avance = activityProgressBar(x.site_id, x.activity_id, taskHours(x.site_id, x.activity_id));
+    return `<tr><td>${x.record_date}</td><td>${c?.name || '—'}<br><span class="small">${st?.name || ''}</span></td><td>${taskName(x.activity_id)}</td><td>${avance}</td><td><span class="badge ${x.status === 'Completado' ? 'done' : 'progress'}">${x.status}</span></td><td>${x.hours}</td><td>${money(x.rate)}</td><td>${money(x.hours * x.rate)}</td><td><button class="badge ${x.paid ? 'paid' : 'unpaid'}" data-requires-write onclick="togglePaid('${x.id}',${!x.paid})">${x.paid ? '✓ Pagado' : '⏳ Pendiente'}</button></td><td style="white-space:nowrap">${editBtn} <button class="danger" data-requires-write onclick="deleteItem('hour_records','${x.id}')">Eliminar</button></td></tr>`;
   }).join('') : `<tr><td colspan="10" class="empty">No hay horas registradas.</td></tr>`;
 }
 
@@ -662,7 +756,11 @@ function openHoursModal() {
   refreshHourTaskOptions(); updateHoursBagInfo(); openModal('hoursModal');
 }
 function editHours(id) {
-  const r = state.hoursSite.find(x => x.id === id); if (!r) return;
+  // Con "Ver todas las empresas" activo, la fila puede pertenecer a una
+  // sede distinta de la seleccionada arriba — en ese caso no está en
+  // state.hoursSite (que solo trae la sede actual), sino en allHoursRows.
+  const r = state.hoursSite.find(x => x.id === id) || (allHoursRows || []).find(x => x.id === id);
+  if (!r) return;
   if (monthClosed(r.site_id, monthOf(r.record_date))) return toast('Este mes ya está cerrado. Usa "Reabrir mes" en Registro de horas si necesitas corregirlo.');
   editingHourId = id;
   $('hoursModalTitle').textContent = 'Editar horas';

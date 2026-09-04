@@ -14,7 +14,7 @@
   (celular, otra sesión abierta, etc.) se queda pegado en una versión vieja
   esperando que alguien limpie el caché a mano.
 -->
-<meta name="build-version" content="2026-09-03T20:05:00Z">
+<meta name="build-version" content="2026-09-03T21:10:00Z">
 <script>
 (function () {
   var CURRENT = document.querySelector('meta[name="build-version"]')?.content || '';
@@ -172,11 +172,11 @@
 </section>
 
 <section id="actividades" class="section">
-<div class="panel"><div class="panelhead"><h2>Gestión de actividades</h2><button class="primary" data-requires-write onclick="openActivityModal()">+ Nuevo avance</button></div><div id="activitiesList"></div></div>
+<div class="panel"><div class="panelhead"><h2>Gestión de actividades</h2><div><button class="primary" data-requires-write onclick="openActivityModal()">+ Nuevo avance</button> <button id="activitiesShowAllBtn" class="secondary" onclick="toggleActivitiesShowAll()">👁️ Ver todas las empresas</button></div></div><div id="activitiesList"></div></div>
 </section>
 
 <section id="horas" class="section">
-<div class="panel"><div class="panelhead"><h2>Registro de horas</h2><button class="primary" data-requires-write onclick="openHoursModal()">+ Registrar horas</button></div><div id="monthCloseBanner"></div><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Empresa / Sede</th><th>Actividad</th><th>Avance</th><th>Estado</th><th>Horas</th><th>Tarifa</th><th>Valor</th><th>Pago</th><th>Acción</th></tr></thead><tbody id="hoursTable"></tbody></table></div></div>
+<div class="panel"><div class="panelhead"><h2>Registro de horas</h2><div><button class="primary" data-requires-write onclick="openHoursModal()">+ Registrar horas</button> <button id="hoursShowAllBtn" class="secondary" onclick="toggleHoursShowAll()">👁️ Ver todas las empresas</button></div></div><div id="monthCloseBanner"></div><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Empresa / Sede</th><th>Actividad</th><th>Avance</th><th>Estado</th><th>Horas</th><th>Tarifa</th><th>Valor</th><th>Pago</th><th>Acción</th></tr></thead><tbody id="hoursTable"></tbody></table></div></div>
 </section>
 
 <section id="evidencias" class="section">
