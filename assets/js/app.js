@@ -23,7 +23,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const monthOf = d => (d || '').slice(0, 7);
 const monthNow = () => new Date().toISOString().slice(0, 7);
 
-function toast(t) { $('toast').textContent = t; $('toast').style.display = 'block'; setTimeout(() => $('toast').style.display = 'none', 2800); }
+function toast(t, ms = 2800) { $('toast').textContent = t; $('toast').style.display = 'block'; clearTimeout(toast._t); toast._t = setTimeout(() => $('toast').style.display = 'none', ms); }
 function options(list, valueField = 'id', textField = 'name') { return list.map(x => `<option value="${x[valueField]}">${x[textField]}</option>`).join(''); }
 function openModal(id) { $(id).classList.add('show'); }
 function closeModal(id) { $(id).classList.remove('show'); }
@@ -935,26 +935,52 @@ function refreshEvidenceTaskOptions() {
   const s = state.companies.find(x => x.id === $('eCompany').value)?.sites.find(x => x.id === $('eSite').value);
   $('eTask').innerHTML = options(s ? activitiesForSite(s.id) : state.activities);
 }
-function openEvidenceModal() { if (!company() || !site()) return toast('Primero agrega una empresa y una sede desde Configuración.'); fillCommon('eCompany', 'eSite', 'eTask'); $('eCompany').value = company().id; fillSiteSelect('eCompany', 'eSite'); $('eSite').value = site().id; refreshEvidenceTaskOptions(); $('eDate').value = today(); $('eLink').value = ''; $('eDesc').value = ''; $('eFile').value = ''; openModal('evidenceModal'); }
+function openEvidenceModal() { if (!company() || !site()) return toast('Primero agrega una empresa y una sede desde Configuración.'); fillCommon('eCompany', 'eSite', 'eTask'); $('eCompany').value = company().id; fillSiteSelect('eCompany', 'eSite'); $('eSite').value = site().id; refreshEvidenceTaskOptions(); $('eDate').value = today(); $('eLink').value = ''; $('eDesc').value = ''; $('eFile').value = ''; setEvidenceSaving(false); openModal('evidenceModal'); }
 $('eCompany')?.addEventListener('change', () => { fillSiteSelect('eCompany', 'eSite'); refreshEvidenceTaskOptions(); });
 $('eSite')?.addEventListener('change', refreshEvidenceTaskOptions);
+function setEvidenceSaving(isSaving) {
+  const btn = document.querySelector('#evidenceModal .primary');
+  if (btn) { btn.disabled = isSaving; btn.textContent = isSaving ? 'Subiendo…' : 'Guardar evidencia'; }
+}
+function withTimeout(promise, ms, timeoutMessage) {
+  let timer;
+  const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(timeoutMessage)), ms); });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 async function saveEvidence() {
   const file = $('eFile').files[0], link = $('eLink').value.trim();
   if (!file && !link) return toast('Carga un archivo o agrega un link');
   const c = $('eCompany').value, s = $('eSite').value, t = $('eTask').value;
   let storagePath = null, fileName = null;
-  if (file) {
-    storagePath = `${s}/${Date.now()}-${file.name}`;
-    const { error: upErr } = await sb.storage.from('evidencias').upload(storagePath, file);
-    if (upErr) return toast('No se pudo subir el archivo: ' + upErr.message);
-    fileName = file.name;
+  setEvidenceSaving(true);
+  try {
+    if (file) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      toast(`Subiendo archivo (${sizeMB} MB)… puede tardar un momento, no cierres esta ventana.`, 8000);
+      storagePath = `${s}/${Date.now()}-${file.name}`;
+      let upErr;
+      try {
+        ({ error: upErr } = await withTimeout(
+          sb.storage.from('evidencias').upload(storagePath, file),
+          90000,
+          'La subida tardó demasiado y se canceló (más de 90 segundos). Puede deberse a tu conexión, al tamaño del archivo o a un antivirus revisando el PDF antes de enviarlo. Intenta de nuevo o prueba con un PDF más liviano.'
+        ));
+      } catch (timeoutErr) {
+        toast(timeoutErr.message, 6000);
+        return;
+      }
+      if (upErr) return toast('No se pudo subir el archivo: ' + upErr.message);
+      fileName = file.name;
+    }
+    const { error } = await sb.from('evidences').insert({
+      company_id: c, site_id: s, activity_id: t, record_date: $('eDate').value,
+      link: link || null, description: $('eDesc').value, storage_path: storagePath, file_name: fileName, created_by: currentProfile?.id,
+    });
+    if (error) return toast('No se pudo guardar: ' + error.message);
+    closeModal('evidenceModal'); await refreshAll(); toast('Evidencia registrada');
+  } finally {
+    setEvidenceSaving(false);
   }
-  const { error } = await sb.from('evidences').insert({
-    company_id: c, site_id: s, activity_id: t, record_date: $('eDate').value,
-    link: link || null, description: $('eDesc').value, storage_path: storagePath, file_name: fileName, created_by: currentProfile?.id,
-  });
-  if (error) return toast('No se pudo guardar: ' + error.message);
-  closeModal('evidenceModal'); await refreshAll(); toast('Evidencia registrada');
 }
 
 async function deleteItem(table, id) {
