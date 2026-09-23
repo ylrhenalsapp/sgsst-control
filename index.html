@@ -14,7 +14,7 @@
   (celular, otra sesión abierta, etc.) se queda pegado en una versión vieja
   esperando que alguien limpie el caché a mano.
 -->
-<meta name="build-version" content="2026-09-23T00:00:00Z">
+<meta name="build-version" content="2026-09-23T02:00:00Z">
 <script>
 (function () {
   var CURRENT = document.querySelector('meta[name="build-version"]')?.content || '';
@@ -214,7 +214,8 @@
 <section id="informes" class="section">
 <div class="panel">
 <div class="panelhead"><h2>Generador de informes</h2><div><button class="success" onclick="generateReport()">↻ Actualizar</button> <button class="secondary" onclick="exportReportPDF()">📕 Exportar PDF</button> <button class="secondary" onclick="exportReportWord()">📘 Exportar Word</button> <button class="primary" onclick="prepareEmail()">📩 Preparar correo</button></div></div>
-<div class="formgrid" style="margin-bottom:16px"><div><label>Tipo de informe</label><select id="reportScope" onchange="generateReport()"><option value="monthly">Informe mensual</option><option value="global">Informe histórico de la sede</option><option value="all">Informe general · todas las empresas</option></select></div><div><label>Periodo de referencia</label><input id="reportMonth" type="month"></div></div>
+<div class="formgrid" style="margin-bottom:16px"><div><label>Tipo de informe</label><select id="reportScope" onchange="generateReport()"><option value="monthly">Informe mensual</option><option value="global">Informe histórico de la sede</option><option value="all">Informe general · todas las empresas</option><option value="provider">Informe por proveedor</option></select></div><div><label>Periodo de referencia</label><input id="reportMonth" type="month"></div></div>
+<div id="reportProviderWrap" style="display:none;margin-bottom:16px"><label>Proveedor</label><select id="reportProvider" onchange="generateReport()"></select></div>
 <div id="reportBox" class="report">Selecciona empresa, sede y periodo y genera el informe.</div>
 </div>
 </section>
