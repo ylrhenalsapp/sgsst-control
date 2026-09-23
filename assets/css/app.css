@@ -303,6 +303,7 @@ select{accent-color:var(--navy);cursor:pointer}
 .iconPurple{background:#efe8fb}
 .iconOrange{background:#fdf0e3}
 .iconTeal{background:#e2f6f3}
+.iconRed{background:#fbe9e7}
 .activityIcon{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:19px;flex:0 0 auto}
 .activityTop{align-items:flex-start!important}
 .activityTop>div:nth-child(2){flex:1;min-width:0}
