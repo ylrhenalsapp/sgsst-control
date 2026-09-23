@@ -395,7 +395,7 @@ async function renderInvoiceReport() {
 
     const genDate = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
     const actTotal = actRows.reduce((a, x) => a + Number(x.hours) * Number(x.rate), 0);
-    const expTotal = expRows.reduce((a, x) => a + Number(x.quantity) * Number(x.unit_value), 0);
+    const expTotal = expRows.reduce((a, x) => a + Number(x.amount), 0);
     const grandTotal = actTotal + expTotal;
     const adv = state.advisorProfile || {};
 
@@ -449,9 +449,9 @@ async function renderInvoiceReport() {
     </tbody></table></div>
 
     <div class="reportSectionTitle" style="margin-top:22px">🚗 2. Desplazamiento y gastos de representación</div>
-    <div class="tablewrap"><table><thead><tr><th>No.</th><th>Fecha</th><th>Empresa</th><th>Concepto</th><th>Cant.</th><th>Vlr. unitario</th><th>Vlr. total</th></tr></thead><tbody>
-      ${expRows.length ? expRows.map((x, i) => `<tr><td>${i + 1}</td><td>${x.record_date}</td><td>${companyName(x.company_id)}</td><td>${x.concept}</td><td>${x.quantity}</td><td>${money(x.unit_value)}</td><td>${money(x.quantity * x.unit_value)}</td></tr>`).join('') : '<tr><td colspan="7" class="empty">Sin gastos registrados en este periodo.</td></tr>'}
-      <tr style="font-weight:800;background:#f4f7fa"><td colspan="6">Subtotal desplazamiento</td><td>${money(expTotal)}</td></tr>
+    <div class="tablewrap"><table><thead><tr><th>No.</th><th>Fecha</th><th>Empresa</th><th>Concepto</th><th>Valor</th></tr></thead><tbody>
+      ${expRows.length ? expRows.map((x, i) => `<tr><td>${i + 1}</td><td>${x.record_date}</td><td>${companyName(x.company_id)}</td><td>${x.concept}</td><td>${money(x.amount)}</td></tr>`).join('') : '<tr><td colspan="5" class="empty">Sin gastos registrados en este periodo.</td></tr>'}
+      <tr style="font-weight:800;background:#f4f7fa"><td colspan="4">Subtotal desplazamiento</td><td>${money(expTotal)}</td></tr>
     </tbody></table></div>
 
     <div class="tablewrap" style="margin-top:16px"><table><tbody>
@@ -481,7 +481,7 @@ async function renderInvoiceReport() {
     </div>
     `;
     toast('Cuenta de cobro generada');
-    lastReport = { scope: 'invoice', providerId, providerName, m, actRows, expRows, actTotal, expTotal, grandTotal, genDate };
+    lastReport = { scope: 'invoice', providerId, providerName, m, actRows, expRows, actTotal, expTotal, grandTotal, genDate, title: `Cuenta de cobro · ${providerName}` };
     return lastReport;
   } catch (err) {
     console.error('Error generando la cuenta de cobro:', err);
@@ -592,6 +592,18 @@ function stripEmojiForPdf(html) {
 // comprimir a JPEG (mucho más liviano que PNG para este tipo de contenido,
 // probado: ~40 veces menos peso con la misma calidad visual) sin correr el
 // riesgo original de que la transparencia se pintara negra.
+// Nombre base del archivo exportado (PDF/Word), según el tipo de informe.
+// "all"/"provider"/"invoice" no tienen sede (r.s) ni empresa (r.c) — antes
+// esto se asumía siempre presente y el botón de exportar quedaba roto (error
+// silencioso al leer r.s.name) para el Informe por proveedor y la Cuenta de
+// cobro. Centralizado aquí para que PDF y Word usen la misma lógica.
+function reportFileBaseName(r) {
+  if (r.scope === 'all') return `informe-general-sgsst-${r.m}`;
+  if (r.scope === 'provider') return `informe-proveedor-${(r.providerName || 'proveedor').replace(/\s+/g, '_')}-${r.m}`;
+  if (r.scope === 'invoice') return `cuenta-cobro-${(r.providerName || 'proveedor').replace(/\s+/g, '_')}-${r.m}`;
+  return `informe-sgsst-${r.s.name.replace(/\s+/g, '_')}-${r.m}`;
+}
+
 async function exportReportPDF() {
   const r = await ensureReport();
   if (!r) return;
@@ -599,7 +611,7 @@ async function exportReportPDF() {
   if (!el) return;
   if (typeof html2canvas === 'undefined' || !window.jspdf) { toast('No se pudo cargar el generador de PDF. Recarga la página e intenta de nuevo.'); return; }
   const { jsPDF } = window.jspdf;
-  const filename = r.scope === 'all' ? `informe-general-sgsst-${r.m}.pdf` : `informe-sgsst-${r.s.name.replace(/\s+/g, '_')}-${r.m}.pdf`;
+  const filename = `${reportFileBaseName(r)}.pdf`;
   toast('Generando PDF, un momento…');
 
   const originalHtml = el.innerHTML;
@@ -676,7 +688,7 @@ async function exportReportWord() {
   const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = r.scope === 'all' ? `informe-general-sgsst-${r.m}.doc` : `informe-sgsst-${r.s.name.replace(/\s+/g, '_')}-${r.m}.doc`;
+  a.download = `${reportFileBaseName(r)}.doc`;
   a.click();
   URL.revokeObjectURL(a.href);
 }

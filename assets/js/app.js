@@ -810,10 +810,10 @@ async function openEvidenceFile(id) {
 // ---------------------------------------------------------------------------
 function renderExpenses() {
   const s = site();
-  if (!s) { if ($('expensesTable')) $('expensesTable').innerHTML = `<tr><td colspan="7" class="empty">${noSiteMessage()}</td></tr>`; return; }
+  if (!s) { if ($('expensesTable')) $('expensesTable').innerHTML = `<tr><td colspan="5" class="empty">${noSiteMessage()}</td></tr>`; return; }
   const rows = [...state.expensesSite].sort((a, b) => b.record_date.localeCompare(a.record_date));
   const c = company();
-  if ($('expensesTable')) $('expensesTable').innerHTML = rows.length ? rows.map(x => `<tr><td>${x.record_date}</td><td>${c?.name || '—'}<br><span class="small">${s?.name || ''}</span></td><td>${x.concept}</td><td>${x.quantity}</td><td>${money(x.unit_value)}</td><td>${money(x.quantity * x.unit_value)}</td><td style="white-space:nowrap"><button class="secondary" data-requires-write onclick="editExpense('${x.id}')">Editar</button> <button class="danger" data-requires-write onclick="deleteItem('expenses','${x.id}')">Eliminar</button></td></tr>`).join('') : `<tr><td colspan="7" class="empty">No hay gastos registrados.</td></tr>`;
+  if ($('expensesTable')) $('expensesTable').innerHTML = rows.length ? rows.map(x => `<tr><td>${x.record_date}</td><td>${c?.name || '—'}<br><span class="small">${s?.name || ''}</span></td><td>${x.concept}</td><td>${money(x.amount)}</td><td style="white-space:nowrap"><button class="secondary" data-requires-write onclick="editExpense('${x.id}')">Editar</button> <button class="danger" data-requires-write onclick="deleteItem('expenses','${x.id}')">Eliminar</button></td></tr>`).join('') : `<tr><td colspan="5" class="empty">No hay gastos registrados.</td></tr>`;
 }
 
 let editingExpenseId = null;
@@ -823,8 +823,7 @@ function openExpenseModal() {
   $('expenseModalTitle').textContent = 'Registrar gasto';
   $('expCompany').innerHTML = options(state.companies); $('expCompany').value = company().id;
   fillSiteSelect('expCompany', 'expSite'); $('expSite').value = site().id;
-  $('expDate').value = today(); $('expConcept').value = ''; $('expQty').value = 1; $('expUnitValue').value = '';
-  updateExpenseTotal();
+  $('expDate').value = today(); $('expConcept').value = ''; $('expAmount').value = '';
   openModal('expenseModal');
 }
 function editExpense(id) {
@@ -835,25 +834,17 @@ function editExpense(id) {
   const c = state.companies.find(cc => cc.id === x.company_id);
   $('expCompany').innerHTML = options(state.companies); $('expCompany').value = c ? c.id : company().id;
   fillSiteSelect('expCompany', 'expSite'); $('expSite').value = x.site_id;
-  $('expDate').value = x.record_date; $('expConcept').value = x.concept; $('expQty').value = x.quantity; $('expUnitValue').value = x.unit_value;
-  updateExpenseTotal();
+  $('expDate').value = x.record_date; $('expConcept').value = x.concept; $('expAmount').value = x.amount;
   openModal('expenseModal');
 }
-function updateExpenseTotal() {
-  const q = Number($('expQty')?.value || 0), u = Number($('expUnitValue')?.value || 0);
-  if ($('expTotal')) $('expTotal').value = money(q * u);
-}
-$('expQty')?.addEventListener('input', updateExpenseTotal);
-$('expUnitValue')?.addEventListener('input', updateExpenseTotal);
 $('expCompany')?.addEventListener('change', () => fillSiteSelect('expCompany', 'expSite'));
 
 async function saveExpense() {
-  const q = Number($('expQty').value); if (!q || q <= 0) return toast('Ingresa una cantidad válida.');
-  const u = Number($('expUnitValue').value); if (!(u >= 0)) return toast('Ingresa un valor unitario válido.');
-  const concept = $('expConcept').value.trim(); if (!concept) return toast('Escribe el concepto del gasto.');
+  const amount = Number($('expAmount').value); if (!(amount >= 0)) return toast('Ingresa un valor válido.');
+  const concept = $('expConcept').value.trim(); if (!concept) return toast('Escribe el concepto del gasto (ej: transporte y alimentación).');
   const c = state.companies.find(x => x.id === $('expCompany').value), s = c?.sites.find(x => x.id === $('expSite').value);
   if (!s) return toast('Selecciona una sede válida.');
-  const payload = { company_id: c.id, site_id: s.id, record_date: $('expDate').value, concept, quantity: q, unit_value: u, created_by: currentProfile?.id };
+  const payload = { company_id: c.id, site_id: s.id, record_date: $('expDate').value, concept, amount, created_by: currentProfile?.id };
   const { error } = editingExpenseId
     ? await sb.from('expenses').update(payload).eq('id', editingExpenseId)
     : await sb.from('expenses').insert(payload);
