@@ -19,7 +19,11 @@ function monthLabel(m) {
 
 function generateReport() {
   const scopeSel = $('reportScope')?.value || 'monthly';
+  // El selector de proveedor solo tiene sentido para el "Informe por
+  // proveedor" — se muestra/oculta según el tipo de informe elegido.
+  if ($('reportProviderWrap')) $('reportProviderWrap').style.display = scopeSel === 'provider' ? 'block' : 'none';
   if (scopeSel === 'all') { renderGlobalReport(); return null; }
+  if (scopeSel === 'provider') { renderProviderReport(); return null; }
   try {
     const c = company(), s = site();
     if (!c || !s) { toast('Selecciona empresa y sede antes de generar el informe.'); return null; }
@@ -248,6 +252,96 @@ async function renderGlobalReport() {
   }
 }
 
+// Informe por proveedor: igual que el informe general, pero solo con las
+// empresas asociadas a UN proveedor (ej. ARL Positiva). Reutiliza
+// computeGlobalOverview con un filtro por company.provider_id, para no
+// duplicar el cálculo de bolsas/cartera.
+async function renderProviderReport() {
+  const box = $('reportBox');
+  if (!state.providers.length) {
+    if (box) box.innerHTML = '<p class="empty">Todavía no hay proveedores creados. Corre la migración de proveedores en Supabase y recarga la página.</p>';
+    lastReport = null;
+    return null;
+  }
+  const providerId = $('reportProvider')?.value || '';
+  if (!providerId) {
+    if (box) box.innerHTML = '<p class="empty">Selecciona un proveedor para generar su informe consolidado.</p>';
+    lastReport = null;
+    return null;
+  }
+  const provider = state.providers.find(p => p.id === providerId);
+  const providerName = provider?.name || 'Proveedor';
+  if (box) box.innerHTML = '<p class="empty">Generando informe del proveedor, un momento…</p>';
+  toast('Generando informe del proveedor…');
+  try {
+    const m = $('reportMonth')?.value || selectedMonth();
+    const { rows, totals } = await computeGlobalOverview(m, c => c.provider_id === providerId);
+    const title = `Informe consolidado · ${providerName}`;
+    const subtitle = `Avance actual y cartera de las empresas asociadas a ${providerName}.`;
+    const genDate = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    if (!rows.length) {
+      if (box) box.innerHTML = `<p class="empty">Todavía no hay empresas asignadas al proveedor "${providerName}". Asígnalas desde Configuración → Empresas.</p>`;
+      lastReport = null;
+      return null;
+    }
+
+    const finRows = [
+      ['Horas asignadas', `${totals.assigned} h`, ''],
+      ['Horas ejecutadas', `${totals.used} h`, ''],
+      ['Horas disponibles', `${totals.remaining} h`, ''],
+      ['Valor pagado', '–', money(totals.paidValue)],
+      ['VALOR PENDIENTE', '–', money(totals.owedValue)],
+    ];
+
+    if (box) box.innerHTML = `
+    <div class="reportTopBar">
+      <div class="reportBrand">
+        <img src="${REPORT_LOGO_B64}" alt="SST Asesorías y Consultorías">
+        <div class="reportBrandText"><h2>${title.toUpperCase()}</h2><p>${subtitle}</p></div>
+      </div>
+      <div class="reportInfoBox">
+        <span class="lbl">Proveedor:</span><span class="val">${providerName}</span>
+        <span class="lbl">Periodo:</span><span class="val">${monthLabel(m)}</span>
+        <span class="lbl">Generado el:</span><span class="val">${genDate}</span>
+        <span class="lbl">Responsable:</span><span class="val">Yasbleidis López Rhenals</span>
+      </div>
+    </div>
+
+    <div class="reportSectionTitle">📊 1. Resumen ejecutivo</div>
+    <div class="reportKpiRow">
+      <div class="reportKpiCard c-blue"><div class="k-label">Empresas del proveedor</div><div class="k-value">${totals.companiesCount}</div><div class="k-sub">${totals.sitesCount} sede(s) en total</div></div>
+      <div class="reportKpiCard c-blue"><div class="k-label">Horas ejecutadas</div><div class="k-value">${totals.used} h</div><div class="k-sub">De un total de ${totals.assigned} h asignadas</div></div>
+      <div class="reportKpiCard c-green"><div class="k-label">Avance</div><div class="k-value">${totals.avancePct === null ? '—' : totals.avancePct + '%'}</div><div class="k-sub">${totals.used} h de ${totals.assigned} h</div></div>
+      <div class="reportKpiCard c-orange"><div class="k-label">Valor pendiente de pago</div><div class="k-value">${money(totals.owedValue)}</div><div class="k-sub">Cartera consolidada del proveedor</div></div>
+      <div class="reportKpiCard c-purple"><div class="k-label">Horas disponibles</div><div class="k-value">${totals.remaining} h</div><div class="k-sub">Saldo consolidado de todas las bolsas</div></div>
+    </div>
+
+    <div class="reportSectionTitle" style="margin-top:22px">📋 2. Resumen financiero consolidado</div>
+    <div class="tablewrap"><table><thead><tr><th>Concepto</th><th>Horas</th><th>Valor</th></tr></thead><tbody>
+      ${finRows.map(r => `<tr${r[0] === 'VALOR PENDIENTE' ? ' style="background:#fdf1ef"' : ''}><td${r[0] === 'VALOR PENDIENTE' ? ' style="color:var(--danger);font-weight:800"' : ''}>${r[0]}</td><td>${r[1]}</td><td${r[0] === 'VALOR PENDIENTE' ? ' style="color:var(--danger);font-weight:800"' : ''}>${r[2]}</td></tr>`).join('')}
+    </tbody></table></div>
+
+    <div class="reportSectionTitle" style="margin-top:22px">🏢 3. Empresas y sedes de ${providerName}</div>
+    <div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sede</th><th>Asignadas</th><th>Usadas</th><th>Disponibles</th><th>Avance</th><th>Cartera</th></tr></thead><tbody>
+      ${rows.map(r => `<tr><td>${r.companyName}</td><td>${r.siteName}</td><td>${r.assigned} h</td><td>${r.used} h</td><td>${r.remaining} h</td><td>${r.avancePct === null ? '—' : r.avancePct + '%'}</td><td>${r.owedValue > 0 ? `<span class="badge unpaid">${money(r.owedValue)}</span>` : '<span class="badge paid">Al día</span>'}</td></tr>`).join('')}
+      <tr style="font-weight:800;background:#f4f7fa"><td colspan="2">TOTAL</td><td>${totals.assigned} h</td><td>${totals.used} h</td><td>${totals.remaining} h</td><td>${totals.avancePct === null ? '—' : totals.avancePct + '%'}</td><td>${money(totals.owedValue)}</td></tr>
+    </tbody></table></div>
+
+    <div class="reportSectionTitle" style="margin-top:22px">✍️ Elaborado por</div>
+    <div class="reportSignatureBlock"><img src="${REPORT_SIGNATURE_B64}" alt="Yasbleidis López Rhenals · SST Asesorías y Consultorías"></div>
+    `;
+    toast('Informe del proveedor generado');
+    lastReport = { scope: 'provider', providerId, providerName, m, rows, totals, title, subtitle, genDate };
+    return lastReport;
+  } catch (err) {
+    console.error('Error generando el informe del proveedor:', err);
+    toast('No se pudo generar el informe del proveedor: ' + (err?.message || err));
+    if (box) box.innerHTML = '<p class="empty">No se pudo generar el informe del proveedor.</p>';
+    return null;
+  }
+}
+
 // Los botones de Exportar/Correo confían en "lastReport" (ya generado por el
 // último cambio de filtro/scope, que dispara generateReport() automático).
 // Si por alguna carrera async lastReport todavía no está listo para el
@@ -256,7 +350,11 @@ async function renderGlobalReport() {
 async function ensureReport() {
   const scope = $('reportScope')?.value || 'monthly';
   if (scope === 'all') return (lastReport && lastReport.scope === 'all') ? lastReport : await renderGlobalReport();
-  return (lastReport && lastReport.scope !== 'all') ? lastReport : generateReport();
+  if (scope === 'provider') {
+    const providerId = $('reportProvider')?.value || '';
+    return (lastReport && lastReport.scope === 'provider' && lastReport.providerId === providerId) ? lastReport : await renderProviderReport();
+  }
+  return (lastReport && (lastReport.scope === 'monthly' || lastReport.scope === 'global')) ? lastReport : generateReport();
 }
 
 async function prepareEmail() {
@@ -269,6 +367,23 @@ async function prepareEmail() {
       `Compartimos el informe general consolidado de seguimiento para todas las empresas y sedes.\n\n` +
       `Horas ejecutadas: ${r.totals.used} h de ${r.totals.assigned} h asignadas\n` +
       `Avance global: ${r.totals.avancePct === null ? '—' : r.totals.avancePct + '%'}\n` +
+      `Valor pagado: ${money(r.totals.paidValue)}\n` +
+      `Valor pendiente por cobrar: ${money(r.totals.owedValue)}\n` +
+      `Saldo disponible consolidado: ${r.totals.remaining} h\n\n` +
+      `Adjunto el informe completo en PDF/Word exportado desde la plataforma.\n\n` +
+      `Cordialmente,\nYasbleidis López Rhenals`
+    );
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    return;
+  }
+  if (r.scope === 'provider') {
+    const subject = encodeURIComponent(`Informe consolidado SG-SST – ${r.providerName} – ${r.m}`);
+    const body = encodeURIComponent(
+      `Cordial saludo,\n\n` +
+      `Compartimos el informe consolidado de las empresas asociadas a ${r.providerName}.\n\n` +
+      `Empresas: ${r.totals.companiesCount} (${r.totals.sitesCount} sede(s))\n` +
+      `Horas ejecutadas: ${r.totals.used} h de ${r.totals.assigned} h asignadas\n` +
+      `Avance: ${r.totals.avancePct === null ? '—' : r.totals.avancePct + '%'}\n` +
       `Valor pagado: ${money(r.totals.paidValue)}\n` +
       `Valor pendiente por cobrar: ${money(r.totals.owedValue)}\n` +
       `Saldo disponible consolidado: ${r.totals.remaining} h\n\n` +

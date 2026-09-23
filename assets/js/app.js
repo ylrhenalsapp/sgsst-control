@@ -89,13 +89,19 @@ function monthClosed(siteId, month) { return state.closedMonths.has(`${siteId}|$
 // Independiente del filtro de empresa/sede de arriba: siempre recorre TODAS
 // las sedes de TODAS las empresas para el mes recibido.
 // ---------------------------------------------------------------------------
-async function computeGlobalOverview(month) {
+async function computeGlobalOverview(month, filterFn) {
   const m = month || selectedMonth();
   const [y, mm] = m.split('-').map(Number);
   const nextMonth = `${new Date(y, mm, 1).toISOString().slice(0, 7)}-01`; // mm ya es 1-indexado -> mes siguiente
 
+  // filterFn opcional: recibe la empresa y decide si se incluye. Se usa para
+  // el "Informe por proveedor" (filtra por company.provider_id) sin duplicar
+  // todo este cálculo de bolsas/cartera.
   const allSites = [];
-  state.companies.forEach(c => (c.sites || []).forEach(s => allSites.push({ company: c, site: s })));
+  state.companies.forEach(c => {
+    if (filterFn && !filterFn(c)) return;
+    (c.sites || []).forEach(s => allSites.push({ company: c, site: s }));
+  });
   if (!allSites.length) return { month: m, rows: [], totals: null };
 
   const [bagResults, { data: hoursRows }] = await Promise.all([
@@ -223,6 +229,11 @@ async function init() {
   $('filterCompany').innerHTML = options(state.companies);
   refreshSitesFilter();
   if ($('reportMonth')) $('reportMonth').value = selectedMonth();
+  if ($('reportProvider')) {
+    $('reportProvider').innerHTML = state.providers.length
+      ? state.providers.map(p => `<option value="${p.id}">${p.name}</option>`).join('')
+      : '<option value="">(sin proveedores creados)</option>';
+  }
   await refreshAll();
   if (typeof maybeShowWelcomeTour === 'function') maybeShowWelcomeTour();
 }
