@@ -14,7 +14,7 @@
   (celular, otra sesión abierta, etc.) se queda pegado en una versión vieja
   esperando que alguien limpie el caché a mano.
 -->
-<meta name="build-version" content="2026-09-23T23:15:00Z">
+<meta name="build-version" content="2026-09-23T23:25:00Z">
 <script>
 (function () {
   var CURRENT = document.querySelector('meta[name="build-version"]')?.content || '';
@@ -296,10 +296,11 @@
 
 <div class="modal" id="companyWizardModal"><div class="modalbox">
   <h2 id="wizardTitle">Agregar empresa</h2>
-  <div class="wizardSteps">
-    <span class="wizardStep" data-step="1">1. Empresa</span>
-    <span class="wizardStep" data-step="2">2. Sede</span>
-    <span class="wizardStep" data-step="3">3. Actividades</span>
+  <div class="wizardSteps" id="wizardStepsBar"></div>
+  <div class="wizardPane" id="wizardPaneProvider" style="display:none">
+    <label>Proveedor</label>
+    <select id="wizProviderSelect"><option value="">Sin proveedor</option></select>
+    <p class="small" style="margin-top:8px"><button type="button" class="linklike" style="margin-left:0" onclick="wizardAddProviderPrompt()">+ Agregar proveedor nuevo</button></p>
   </div>
   <div class="wizardPane" id="wizardPane1">
     <div id="wizStepCompanyNew"><label>Nombre de la empresa</label><input id="wizCompanyName" placeholder="Nombre de la empresa"></div>
