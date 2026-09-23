@@ -23,6 +23,45 @@ const today = () => new Date().toISOString().slice(0, 10);
 const monthOf = d => (d || '').slice(0, 7);
 const monthNow = () => new Date().toISOString().slice(0, 7);
 
+// Convierte un valor en pesos a su forma escrita en español, para el
+// "VALOR EN LETRAS" de la Cuenta de cobro (ej. 1564000 -> "UN MILLON
+// QUINIENTOS SESENTA Y CUATRO MIL PESOS M/CTE"). Cubre hasta cientos de
+// millones, más que suficiente para los montos que maneja la plataforma.
+function numeroALetras(valor) {
+  const num = Math.round(Number(valor) || 0);
+  if (num === 0) return 'CERO PESOS M/CTE';
+  const UNIDADES = ['', 'UN', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE'];
+  const ESPECIALES = ['DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISEIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE'];
+  const DECENAS = ['', '', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA'];
+  const CENTENAS = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS', 'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS'];
+
+  function seccion(n) { // n entre 0 y 999
+    let out = '';
+    const c = Math.floor(n / 100), r = n % 100;
+    if (c > 0) out += (n === 100 ? 'CIEN' : CENTENAS[c]) + ' ';
+    if (r > 0) {
+      if (r < 10) out += UNIDADES[r];
+      else if (r < 20) out += ESPECIALES[r - 10];
+      else {
+        const d = Math.floor(r / 10), u = r % 10;
+        out += DECENAS[d] + (u > 0 ? ' Y ' + UNIDADES[u] : '');
+      }
+    }
+    return out.trim();
+  }
+
+  const millones = Math.floor(num / 1000000);
+  const miles = Math.floor((num % 1000000) / 1000);
+  const resto = num % 1000;
+
+  const partes = [];
+  if (millones > 0) partes.push(millones === 1 ? 'UN MILLON' : seccion(millones) + ' MILLONES');
+  if (miles > 0) partes.push(miles === 1 ? 'MIL' : seccion(miles) + ' MIL');
+  if (resto > 0) partes.push(seccion(resto));
+
+  return (partes.join(' ') + ' PESOS M/CTE').replace(/\s+/g, ' ').trim();
+}
+
 function toast(t, ms = 2800) { $('toast').textContent = t; $('toast').style.display = 'block'; clearTimeout(toast._t); toast._t = setTimeout(() => $('toast').style.display = 'none', ms); }
 function options(list, valueField = 'id', textField = 'name') { return list.map(x => `<option value="${x[valueField]}">${x[textField]}</option>`).join(''); }
 function openModal(id) { $(id).classList.add('show'); }
@@ -43,7 +82,9 @@ let state = {
   statusMap: {},   // `${siteId}|${activityId}` -> 'Pendiente'|'En proceso'|'Completada'
   targetsMap: {},  // `${siteId}|${activityId}` -> target_hours (solo si hay meta configurada)
   siteActivities: [], // [{site_id, activity_id}] -> qué actividades del catálogo aplican a cada sede
-  providers: [], // [{id,name}] catálogo de proveedores (ARL, etc.) — una empresa puede no tener proveedor asignado
+  providers: [], // [{id,name,nit,gerente,direccion,ciudad,telefono,email_radicacion}] catálogo de proveedores (ARL, etc.) — una empresa puede no tener proveedor asignado
+  advisorProfile: null, // datos fijos de Yasbleidis (cédula, profesión, cuenta bancaria...) para la Cuenta de cobro
+  expensesSite: [], // viáticos/gastos de desplazamiento de la sede seleccionada (todas las fechas)
   closedMonths: new Set(), // `${siteId}|${'YYYY-MM'}` -> mes cerrado (no admite horas nuevas ni edición)
   bag: { assigned: 0, additional: 0, carry: 0, total: 0, used: 0, remaining: 0 },
   bagExists: false,
@@ -214,7 +255,7 @@ async function init() {
   // normal (solo no se muestra columna de proveedor todavía).
   try {
     const [{ data: providers }, { data: companyProviders }] = await Promise.all([
-      sb.from('providers').select('id,name').order('name'),
+      sb.from('providers').select('*').order('name'),
       sb.from('companies').select('id,provider_id'),
     ]);
     state.providers = providers || [];
@@ -222,6 +263,17 @@ async function init() {
     state.companies.forEach(c => { c.provider_id = provMap.get(c.id) ?? null; });
   } catch (e) {
     state.providers = [];
+  }
+
+  // Datos fijos de Yasbleidis para la Cuenta de cobro (migración 0012) —
+  // también "a prueba de fallos": si todavía no se corrió esa migración, la
+  // Cuenta de cobro simplemente muestra los campos vacíos hasta que se
+  // guarden desde Configuración → Mis datos.
+  try {
+    const { data: advisor } = await sb.from('advisor_profile').select('*').eq('id', true).maybeSingle();
+    state.advisorProfile = advisor || null;
+  } catch (e) {
+    state.advisorProfile = null;
   }
 
   $('filterMonth').value = monthNow();
@@ -332,7 +384,7 @@ async function refreshAll() {
     // que aparezcan los botones "+ Agregar empresa" / "+ Agregar sede" /
     // "+ Nueva actividad" — antes esta función se detenía aquí mismo y
     // Configuración se quedaba en blanco para siempre.
-    state.hoursSite = []; state.evidencesSite = []; state.calendarSite = [];
+    state.hoursSite = []; state.evidencesSite = []; state.calendarSite = []; state.expensesSite = [];
     state.bag = { assigned: 0, additional: 0, carry: 0, total: 0, used: 0, remaining: 0 };
     state.bagExists = false;
     renderBagAlert();
@@ -341,6 +393,7 @@ async function refreshAll() {
     renderHours();
     renderMonthCloseBanner();
     renderEvidences();
+    renderExpenses();
     await renderConfig();
     renderCalendar();
     renderNotifBell();
@@ -366,12 +419,23 @@ async function refreshAll() {
   state.bag = (bagRow && bagRow[0]) || { assigned: 0, additional: 0, carry: 0, total: 0, used: 0, remaining: 0 };
   state.bagExists = !!count;
 
+  // Viáticos (migración 0012): en consulta aparte y "a prueba de fallos" —
+  // si todavía no se corrió esa migración, esta sección simplemente queda
+  // vacía en vez de romper el resto de refreshAll.
+  try {
+    const { data: exp } = await sb.from('expenses').select('*').eq('site_id', s.id);
+    state.expensesSite = exp || [];
+  } catch (e) {
+    state.expensesSite = [];
+  }
+
   renderBagAlert();
   renderDashboard();
   renderActivities();
   renderHours();
   renderMonthCloseBanner();
   renderEvidences();
+  renderExpenses();
   renderConfig();
   renderCalendar();
   renderNotifBell();
@@ -738,6 +802,67 @@ async function openEvidenceFile(id) {
   window.open(data.signedUrl, '_blank');
 }
 
+// ---------------------------------------------------------------------------
+// Viáticos / gastos de desplazamiento y representación (migración 0012).
+// Misma lógica que Registro de horas (ligados a empresa+sede seleccionada),
+// pero sin bolsa ni cierre de mes: son gastos, no horas ejecutadas. Se usan
+// en la sección 2 de la Cuenta de cobro (Informes → Cuenta de cobro).
+// ---------------------------------------------------------------------------
+function renderExpenses() {
+  const s = site();
+  if (!s) { if ($('expensesTable')) $('expensesTable').innerHTML = `<tr><td colspan="7" class="empty">${noSiteMessage()}</td></tr>`; return; }
+  const rows = [...state.expensesSite].sort((a, b) => b.record_date.localeCompare(a.record_date));
+  const c = company();
+  if ($('expensesTable')) $('expensesTable').innerHTML = rows.length ? rows.map(x => `<tr><td>${x.record_date}</td><td>${c?.name || '—'}<br><span class="small">${s?.name || ''}</span></td><td>${x.concept}</td><td>${x.quantity}</td><td>${money(x.unit_value)}</td><td>${money(x.quantity * x.unit_value)}</td><td style="white-space:nowrap"><button class="secondary" data-requires-write onclick="editExpense('${x.id}')">Editar</button> <button class="danger" data-requires-write onclick="deleteItem('expenses','${x.id}')">Eliminar</button></td></tr>`).join('') : `<tr><td colspan="7" class="empty">No hay gastos registrados.</td></tr>`;
+}
+
+let editingExpenseId = null;
+function openExpenseModal() {
+  if (!company() || !site()) return toast('Primero agrega una empresa y una sede desde Configuración.');
+  editingExpenseId = null;
+  $('expenseModalTitle').textContent = 'Registrar gasto';
+  $('expCompany').innerHTML = options(state.companies); $('expCompany').value = company().id;
+  fillSiteSelect('expCompany', 'expSite'); $('expSite').value = site().id;
+  $('expDate').value = today(); $('expConcept').value = ''; $('expQty').value = 1; $('expUnitValue').value = '';
+  updateExpenseTotal();
+  openModal('expenseModal');
+}
+function editExpense(id) {
+  const x = state.expensesSite.find(e => e.id === id);
+  if (!x) return;
+  editingExpenseId = id;
+  $('expenseModalTitle').textContent = 'Editar gasto';
+  const c = state.companies.find(cc => cc.id === x.company_id);
+  $('expCompany').innerHTML = options(state.companies); $('expCompany').value = c ? c.id : company().id;
+  fillSiteSelect('expCompany', 'expSite'); $('expSite').value = x.site_id;
+  $('expDate').value = x.record_date; $('expConcept').value = x.concept; $('expQty').value = x.quantity; $('expUnitValue').value = x.unit_value;
+  updateExpenseTotal();
+  openModal('expenseModal');
+}
+function updateExpenseTotal() {
+  const q = Number($('expQty')?.value || 0), u = Number($('expUnitValue')?.value || 0);
+  if ($('expTotal')) $('expTotal').value = money(q * u);
+}
+$('expQty')?.addEventListener('input', updateExpenseTotal);
+$('expUnitValue')?.addEventListener('input', updateExpenseTotal);
+$('expCompany')?.addEventListener('change', () => fillSiteSelect('expCompany', 'expSite'));
+
+async function saveExpense() {
+  const q = Number($('expQty').value); if (!q || q <= 0) return toast('Ingresa una cantidad válida.');
+  const u = Number($('expUnitValue').value); if (!(u >= 0)) return toast('Ingresa un valor unitario válido.');
+  const concept = $('expConcept').value.trim(); if (!concept) return toast('Escribe el concepto del gasto.');
+  const c = state.companies.find(x => x.id === $('expCompany').value), s = c?.sites.find(x => x.id === $('expSite').value);
+  if (!s) return toast('Selecciona una sede válida.');
+  const payload = { company_id: c.id, site_id: s.id, record_date: $('expDate').value, concept, quantity: q, unit_value: u, created_by: currentProfile?.id };
+  const { error } = editingExpenseId
+    ? await sb.from('expenses').update(payload).eq('id', editingExpenseId)
+    : await sb.from('expenses').insert(payload);
+  if (error) return toast('No se pudo guardar el gasto: ' + error.message + (error.message?.includes('expenses') ? ' (falta correr la migración 0012 en Supabase).' : ''));
+  closeModal('expenseModal'); editingExpenseId = null;
+  await refreshAll();
+  toast('Gasto guardado.');
+}
+
 function showSection(id, el) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   $(id).classList.add('active');
@@ -1022,7 +1147,7 @@ async function deleteItem(table, id) {
 // Configuración: empresas, sedes, tarifas, actividades
 // ---------------------------------------------------------------------------
 function showConfig(tab, btn) {
-  ['companies', 'sites', 'rates', 'tasks', 'migration'].forEach(x => $('cfg-' + x).style.display = x === tab ? 'block' : 'none');
+  ['companies', 'sites', 'rates', 'tasks', 'providers', 'mydata', 'migration'].forEach(x => $('cfg-' + x).style.display = x === tab ? 'block' : 'none');
   document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 }
@@ -1053,6 +1178,46 @@ async function renderConfig() {
   // uno conserva la tarifa con la que se creó).
   $('cfg-rates').innerHTML = `<div class="panelhead"><h2>Tarifas por empresa</h2></div><p class="small">Cada empresa tiene su propia tarifa por hora. Se propone para los registros nuevos de esa empresa; los ya guardados conservan la suya.</p><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Tarifa por hora (COP)</th><th></th></tr></thead><tbody>${state.companies.length ? state.companies.map(c => `<tr><td>${c.name}</td><td><input id="rate-${c.id}" type="number" min="0" step="1000" value="${companyRate(c)}" style="width:150px"></td><td><button class="primary" data-requires-write onclick="updateCompanyRate('${c.id}')">Guardar</button></td></tr>`).join('') : '<tr><td colspan="3" class="empty">Todavía no tienes ninguna empresa registrada.</td></tr>'}</tbody></table></div>`;
   $('cfg-tasks').innerHTML = `<div class="panelhead"><h2>Actividades del proyecto</h2><button class="primary" data-requires-write onclick="addTaskPrompt()">+ Nueva actividad</button></div>${state.activities.map(t => `<div class="activity"><div class="activityTop"><div><b>${t.name}</b>${t.is_fixed ? '<div class="small">Actividad inicial establecida</div>' : '<div class="small">Actividad agregada</div>'}</div><button class="secondary" data-requires-write onclick="editTaskPrompt('${t.id}')">✏️ Editar nombre</button></div></div>`).join('')}`;
+
+  // Proveedores: nombre + datos de facturación (NIT, gerente, dirección...)
+  // usados para llenar solos el encabezado de la Cuenta de cobro de cada
+  // proveedor (Informes → Cuenta de cobro).
+  $('cfg-providers').innerHTML = `<div class="panelhead"><h2>Proveedores</h2><button class="primary" data-requires-write onclick="addProviderPrompt()">+ Agregar proveedor</button></div><p class="small">Estos datos llenan el encabezado de la Cuenta de cobro de cada proveedor. El nombre es obligatorio; lo demás es opcional.</p>${state.providers.length ? state.providers.map(p => `
+    <div class="panel" style="margin-bottom:14px">
+      <div class="formgrid">
+        <div><label>Nombre</label><input id="provName-${p.id}" value="${p.name || ''}"></div>
+        <div><label>NIT</label><input id="provNit-${p.id}" value="${p.nit || ''}"></div>
+        <div><label>Gerente / contacto</label><input id="provGerente-${p.id}" value="${p.gerente || ''}"></div>
+        <div><label>Dirección</label><input id="provDireccion-${p.id}" value="${p.direccion || ''}"></div>
+        <div><label>Ciudad</label><input id="provCiudad-${p.id}" value="${p.ciudad || ''}"></div>
+        <div><label>Teléfono</label><input id="provTelefono-${p.id}" value="${p.telefono || ''}"></div>
+        <div class="full"><label>Email de radicación de cuentas</label><input id="provEmail-${p.id}" value="${p.email_radicacion || ''}"></div>
+      </div>
+      <button class="primary" data-requires-write onclick="updateProvider('${p.id}')" style="margin-top:10px">Guardar</button>
+    </div>`).join('') : '<p class="empty">Todavía no tienes proveedores. Agrega uno con el botón de arriba, o corre la migración 0011_providers.sql en Supabase si esperabas ver los que ya te sugerí (OrientarSalud, Rehavid SAS, ARL Positiva).</p>'}`;
+
+  // Mis datos: fijos de Yasbleidis, usados en cualquier Cuenta de cobro sin
+  // importar el proveedor (Configuración → Mis datos).
+  {
+    const adv = state.advisorProfile || {};
+    $('cfg-mydata').innerHTML = `<div class="panelhead"><h2>Mis datos</h2></div><p class="small">Estos datos se usan para llenar automáticamente el encabezado de cada Cuenta de cobro que generes desde Informes. Se guardan una sola vez.</p>
+    <div class="formgrid">
+      <div><label>Cédula</label><input id="advCedula" value="${adv.cedula || ''}"></div>
+      <div><label>Profesión</label><input id="advProfesion" value="${adv.profesion || ''}"></div>
+      <div><label>Registro profesional</label><input id="advRegistro" value="${adv.registro_profesional || ''}"></div>
+      <div><label>Dirección</label><input id="advDireccion" value="${adv.direccion || ''}"></div>
+      <div><label>Ciudad</label><input id="advCiudad" value="${adv.ciudad || ''}"></div>
+      <div><label>Departamento</label><input id="advDepartamento" value="${adv.departamento || ''}"></div>
+      <div><label>Teléfono</label><input id="advTelefono" value="${adv.telefono || ''}"></div>
+      <div><label>Celular</label><input id="advCelular" value="${adv.celular || ''}"></div>
+      <div><label>Email</label><input id="advEmail" value="${adv.email || ''}"></div>
+      <div><label>Banco</label><input id="advBanco" value="${adv.banco || ''}"></div>
+      <div><label>Cuenta bancaria</label><input id="advCuenta" value="${adv.cuenta_bancaria || ''}"></div>
+      <div><label>Régimen de IVA</label><input id="advRegimen" value="${adv.regimen_iva || 'IVA Régimen Simplificado'}"></div>
+      <div class="full"><label>Actividad económica</label><input id="advActividad" value="${adv.actividad_economica || ''}"></div>
+    </div>
+    <button class="primary" data-requires-write onclick="saveAdvisorProfile()" style="margin-top:14px">Guardar mis datos</button>`;
+  }
 }
 
 async function removeCompany(id) { if (state.companies.length <= 1) return toast('Debe existir al menos una empresa'); if (confirm('¿Eliminar empresa y sus sedes?')) { const { error } = await sb.from('companies').delete().eq('id', id); if (error) return toast(error.message); await init(); } }
@@ -1434,6 +1599,67 @@ async function updateCompanyProvider(id) {
   const providerName = state.providers.find(p => p.id === providerId)?.name;
   toast(providerName ? `${c?.name || 'Empresa'} asignada a ${providerName}.` : `${c?.name || 'Empresa'} quedó sin proveedor.`);
 }
+
+// ---------------------------------------------------------------------------
+// Configuración → Proveedores: alta rápida (solo nombre) + edición de los
+// datos de facturación (NIT, gerente, dirección...) que se usan para llenar
+// el encabezado de la Cuenta de cobro (migración 0012).
+// ---------------------------------------------------------------------------
+async function addProviderPrompt() {
+  const n = prompt('Nombre del nuevo proveedor:');
+  if (!n?.trim()) return;
+  const { error } = await sb.from('providers').insert({ name: n.trim() });
+  if (error) return toast('No se pudo crear el proveedor: ' + error.message);
+  toast('Proveedor agregado. Completa sus datos de facturación abajo si los necesitas.');
+  await init();
+}
+async function updateProvider(id) {
+  const name = $('provName-' + id)?.value.trim();
+  if (!name) return toast('El nombre del proveedor no puede quedar vacío.');
+  const payload = {
+    name,
+    nit: $('provNit-' + id)?.value.trim() || null,
+    gerente: $('provGerente-' + id)?.value.trim() || null,
+    direccion: $('provDireccion-' + id)?.value.trim() || null,
+    ciudad: $('provCiudad-' + id)?.value.trim() || null,
+    telefono: $('provTelefono-' + id)?.value.trim() || null,
+    email_radicacion: $('provEmail-' + id)?.value.trim() || null,
+  };
+  const { error } = await sb.from('providers').update(payload).eq('id', id);
+  if (error) return toast('No se pudo actualizar el proveedor: ' + error.message + (error.message?.includes('nit') ? ' (falta correr la migración 0012 en Supabase).' : ''));
+  const p = state.providers.find(x => x.id === id);
+  if (p) Object.assign(p, payload);
+  toast('Datos del proveedor actualizados.');
+}
+
+// ---------------------------------------------------------------------------
+// Configuración → Mis datos: datos fijos de Yasbleidis (cédula, profesión,
+// cuenta bancaria...) que se usan en el encabezado de cualquier Cuenta de
+// cobro, sin importar el proveedor (migración 0012).
+// ---------------------------------------------------------------------------
+async function saveAdvisorProfile() {
+  const payload = {
+    id: true,
+    cedula: $('advCedula').value.trim() || null,
+    profesion: $('advProfesion').value.trim() || null,
+    registro_profesional: $('advRegistro').value.trim() || null,
+    direccion: $('advDireccion').value.trim() || null,
+    ciudad: $('advCiudad').value.trim() || null,
+    departamento: $('advDepartamento').value.trim() || null,
+    telefono: $('advTelefono').value.trim() || null,
+    celular: $('advCelular').value.trim() || null,
+    email: $('advEmail').value.trim() || null,
+    banco: $('advBanco').value.trim() || null,
+    cuenta_bancaria: $('advCuenta').value.trim() || null,
+    regimen_iva: $('advRegimen').value.trim() || null,
+    actividad_economica: $('advActividad').value.trim() || null,
+  };
+  const { error } = await sb.from('advisor_profile').upsert(payload);
+  if (error) return toast('No se pudo guardar: ' + error.message + (error.message?.includes('advisor_profile') ? ' (falta correr la migración 0012 en Supabase).' : ''));
+  state.advisorProfile = payload;
+  toast('Tus datos quedaron guardados.');
+}
+
 async function addTaskPrompt() { const n = prompt('Nombre de la nueva actividad:'); if (!n?.trim()) return; const { error } = await sb.from('activities').insert({ name: n.trim(), is_fixed: false }); if (error) return toast(error.message); logActivity('activities_loaded', `Se agregó la actividad "${n.trim()}" al catálogo.`); await init(); toast('Actividad agregada'); }
 // Corrige el nombre de una actividad del catálogo (por ejemplo, si quedó mal
 // escrita al crearla). Cambia el nombre en todas las sedes donde ya está

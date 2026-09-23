@@ -19,11 +19,13 @@ function monthLabel(m) {
 
 function generateReport() {
   const scopeSel = $('reportScope')?.value || 'monthly';
-  // El selector de proveedor solo tiene sentido para el "Informe por
-  // proveedor" — se muestra/oculta según el tipo de informe elegido.
-  if ($('reportProviderWrap')) $('reportProviderWrap').style.display = scopeSel === 'provider' ? 'block' : 'none';
+  // El selector de proveedor se usa tanto para el "Informe por proveedor"
+  // como para la "Cuenta de cobro" — se muestra/oculta según el tipo de
+  // informe elegido.
+  if ($('reportProviderWrap')) $('reportProviderWrap').style.display = (scopeSel === 'provider' || scopeSel === 'invoice') ? 'block' : 'none';
   if (scopeSel === 'all') { renderGlobalReport(); return null; }
   if (scopeSel === 'provider') { renderProviderReport(); return null; }
+  if (scopeSel === 'invoice') { renderInvoiceReport(); return null; }
   try {
     const c = company(), s = site();
     if (!c || !s) { toast('Selecciona empresa y sede antes de generar el informe.'); return null; }
@@ -342,6 +344,153 @@ async function renderProviderReport() {
   }
 }
 
+// Cuenta de cobro: el documento formal que Yasbleidis le presenta a un
+// proveedor para que le paguen, con el detalle de cada actividad ejecutada
+// (hour_records) y cada gasto de desplazamiento (expenses) durante un mes,
+// en las empresas de ese proveedor. Antes se armaba a mano en Excel — el
+// encabezado se llena solo con los datos de facturación del proveedor
+// (Configuración → Proveedores) y los datos fijos de Yasbleidis
+// (Configuración → Mis datos).
+async function renderInvoiceReport() {
+  const box = $('reportBox');
+  if (!state.providers.length) {
+    if (box) box.innerHTML = '<p class="empty">Todavía no hay proveedores creados. Ve a Configuración → Proveedores para agregar uno.</p>';
+    lastReport = null;
+    return null;
+  }
+  const providerId = $('reportProvider')?.value || '';
+  if (!providerId) {
+    if (box) box.innerHTML = '<p class="empty">Selecciona un proveedor para generar su cuenta de cobro.</p>';
+    lastReport = null;
+    return null;
+  }
+  const provider = state.providers.find(p => p.id === providerId) || {};
+  const providerName = provider.name || 'Proveedor';
+  const providerCompanies = state.companies.filter(c => c.provider_id === providerId);
+  if (!providerCompanies.length) {
+    if (box) box.innerHTML = `<p class="empty">Todavía no hay empresas asignadas al proveedor "${providerName}". Asígnalas desde Configuración → Empresas.</p>`;
+    lastReport = null;
+    return null;
+  }
+  if (box) box.innerHTML = '<p class="empty">Generando cuenta de cobro, un momento…</p>';
+  toast('Generando cuenta de cobro…');
+  try {
+    const m = $('reportMonth')?.value || selectedMonth();
+    const [y, mm] = m.split('-').map(Number);
+    const nextMonth = `${new Date(y, mm, 1).toISOString().slice(0, 7)}-01`;
+    const companyIds = new Set(providerCompanies.map(c => c.id));
+    const companyName = id => state.companies.find(c => c.id === id)?.name || '—';
+
+    const { data: hoursRows } = await sb.from('hour_records').select('*').gte('record_date', `${m}-01`).lt('record_date', nextMonth);
+    // Viáticos (migración 0012): "a prueba de fallos" — si todavía no se
+    // corrió esa migración, la sección simplemente sale vacía.
+    let expenseRows = [];
+    try {
+      const { data } = await sb.from('expenses').select('*').gte('record_date', `${m}-01`).lt('record_date', nextMonth);
+      expenseRows = data || [];
+    } catch (e) { expenseRows = []; }
+
+    const actRows = (hoursRows || []).filter(x => companyIds.has(x.company_id)).sort((a, b) => a.record_date.localeCompare(b.record_date));
+    const expRows = expenseRows.filter(x => companyIds.has(x.company_id)).sort((a, b) => a.record_date.localeCompare(b.record_date));
+
+    const genDate = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+    const actTotal = actRows.reduce((a, x) => a + Number(x.hours) * Number(x.rate), 0);
+    const expTotal = expRows.reduce((a, x) => a + Number(x.quantity) * Number(x.unit_value), 0);
+    const grandTotal = actTotal + expTotal;
+    const adv = state.advisorProfile || {};
+
+    if (box) box.innerHTML = `
+    <div class="reportTopBar">
+      <div class="reportBrand">
+        <img src="${REPORT_LOGO_B64}" alt="SST Asesorías y Consultorías">
+        <div class="reportBrandText"><h2>CUENTA DE COBRO</h2><p>Relación de actividades mensuales ejecutadas para ${providerName}.</p></div>
+      </div>
+      <div class="reportInfoBox">
+        <span class="lbl">Proveedor:</span><span class="val">${providerName}</span>
+        <span class="lbl">Periodo:</span><span class="val">${monthLabel(m)}</span>
+        <span class="lbl">Generado el:</span><span class="val">${genDate}</span>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:8px">
+      <div style="border:1px solid var(--line);border-radius:12px;padding:14px">
+        <div class="reportSectionTitle" style="margin:0 0 8px">🏢 Proveedor</div>
+        <div class="reportInfoBox" style="grid-template-columns:auto 1fr">
+          <span class="lbl">Empresa:</span><span class="val">${providerName}</span>
+          <span class="lbl">NIT:</span><span class="val">${provider.nit || '—'}</span>
+          <span class="lbl">Gerente:</span><span class="val">${provider.gerente || '—'}</span>
+          <span class="lbl">Dirección:</span><span class="val">${provider.direccion || '—'}</span>
+          <span class="lbl">Ciudad:</span><span class="val">${provider.ciudad || '—'}</span>
+          <span class="lbl">Teléfono:</span><span class="val">${provider.telefono || '—'}</span>
+          <span class="lbl">Radicación:</span><span class="val">${provider.email_radicacion || '—'}</span>
+        </div>
+      </div>
+      <div style="border:1px solid var(--line);border-radius:12px;padding:14px">
+        <div class="reportSectionTitle" style="margin:0 0 8px">🧾 Datos personales</div>
+        <div class="reportInfoBox" style="grid-template-columns:auto 1fr">
+          <span class="lbl">Nombre:</span><span class="val">Yasbleidis López Rhenals</span>
+          <span class="lbl">Cédula:</span><span class="val">${adv.cedula || '—'}</span>
+          <span class="lbl">Profesión:</span><span class="val">${adv.profesion || '—'}</span>
+          <span class="lbl">Reg. profesional:</span><span class="val">${adv.registro_profesional || '—'}</span>
+          <span class="lbl">Dirección:</span><span class="val">${adv.direccion || '—'}</span>
+          <span class="lbl">Ciudad:</span><span class="val">${adv.ciudad || '—'}${adv.departamento ? ' · ' + adv.departamento : ''}</span>
+          <span class="lbl">Tel. / Celular:</span><span class="val">${[adv.telefono, adv.celular].filter(Boolean).join(' / ') || '—'}</span>
+          <span class="lbl">Email:</span><span class="val">${adv.email || '—'}</span>
+          <span class="lbl">Cuenta:</span><span class="val">${adv.cuenta_bancaria ? adv.cuenta_bancaria + (adv.banco ? ' · ' + adv.banco : '') : '—'}</span>
+          <span class="lbl">Régimen:</span><span class="val">${adv.regimen_iva || 'IVA Régimen Simplificado'}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="reportSectionTitle">📋 1. Actividades realizadas</div>
+    <div class="tablewrap"><table><thead><tr><th>No.</th><th>Fecha</th><th>Empresa</th><th>Descripción</th><th>Horas</th><th>Vlr. unitario</th><th>Vlr. total</th></tr></thead><tbody>
+      ${actRows.length ? actRows.map((x, i) => `<tr><td>${i + 1}</td><td>${x.record_date}</td><td>${companyName(x.company_id)}</td><td>${taskName(x.activity_id)}${x.notes ? ' · ' + x.notes : ''}</td><td>${x.hours} h</td><td>${money(x.rate)}</td><td>${money(x.hours * x.rate)}</td></tr>`).join('') : '<tr><td colspan="7" class="empty">Sin actividades registradas en este periodo.</td></tr>'}
+      <tr style="font-weight:800;background:#f4f7fa"><td colspan="6">Subtotal actividades</td><td>${money(actTotal)}</td></tr>
+    </tbody></table></div>
+
+    <div class="reportSectionTitle" style="margin-top:22px">🚗 2. Desplazamiento y gastos de representación</div>
+    <div class="tablewrap"><table><thead><tr><th>No.</th><th>Fecha</th><th>Empresa</th><th>Concepto</th><th>Cant.</th><th>Vlr. unitario</th><th>Vlr. total</th></tr></thead><tbody>
+      ${expRows.length ? expRows.map((x, i) => `<tr><td>${i + 1}</td><td>${x.record_date}</td><td>${companyName(x.company_id)}</td><td>${x.concept}</td><td>${x.quantity}</td><td>${money(x.unit_value)}</td><td>${money(x.quantity * x.unit_value)}</td></tr>`).join('') : '<tr><td colspan="7" class="empty">Sin gastos registrados en este periodo.</td></tr>'}
+      <tr style="font-weight:800;background:#f4f7fa"><td colspan="6">Subtotal desplazamiento</td><td>${money(expTotal)}</td></tr>
+    </tbody></table></div>
+
+    <div class="tablewrap" style="margin-top:16px"><table><tbody>
+      <tr style="font-weight:800;background:#f4f7fa"><td>TOTAL A COBRAR</td><td style="text-align:right">${money(grandTotal)}</td></tr>
+    </tbody></table></div>
+    <p class="small" style="margin-top:10px"><b>Valor en letras:</b> ${numeroALetras(grandTotal)}</p>
+
+    <div class="reportSectionTitle" style="margin-top:22px">📜 Declaración</div>
+    <p class="small" style="line-height:1.7">
+      1. Soy persona natural y cumplo con todos los requisitos para pertenecer al ${adv.regimen_iva || 'Régimen Simplificado'} y me encuentro debidamente inscrito(a) en el RUT.<br>
+      2. Me encuentro dentro de las situaciones contempladas en el artículo 499 del Estatuto Tributario.<br>
+      3. En constancia y de conformidad con las normas tributarias, no estoy en la obligación de expedir factura y el presente documento se ajusta a las prescripciones legales en esta materia.<br>
+      4. Declaro que la información aquí consignada es correcta y se ajusta a las disposiciones legales.
+    </p>
+
+    <div class="reportGrid2" style="margin-top:24px">
+      <div>
+        <div class="reportSectionTitle" style="margin:0 0 8px">✍️ Firma</div>
+        <div class="reportSignatureBlock"><img src="${REPORT_SIGNATURE_B64}" alt="Yasbleidis López Rhenals · SST Asesorías y Consultorías"></div>
+        <p class="small" style="text-align:center;margin-top:4px">C.C. ${adv.cedula || '________________'}</p>
+      </div>
+      <div>
+        <div class="reportSectionTitle" style="margin:0 0 8px">📥 Recibido por</div>
+        <p class="small" style="margin:40px 0 4px;border-top:1px solid var(--line);padding-top:6px">${provider.gerente || '_______________________________'}</p>
+        <p class="small">Fecha: ____ / ____ / ______</p>
+      </div>
+    </div>
+    `;
+    toast('Cuenta de cobro generada');
+    lastReport = { scope: 'invoice', providerId, providerName, m, actRows, expRows, actTotal, expTotal, grandTotal, genDate };
+    return lastReport;
+  } catch (err) {
+    console.error('Error generando la cuenta de cobro:', err);
+    toast('No se pudo generar la cuenta de cobro: ' + (err?.message || err));
+    if (box) box.innerHTML = '<p class="empty">No se pudo generar la cuenta de cobro.</p>';
+    return null;
+  }
+}
+
 // Los botones de Exportar/Correo confían en "lastReport" (ya generado por el
 // último cambio de filtro/scope, que dispara generateReport() automático).
 // Si por alguna carrera async lastReport todavía no está listo para el
@@ -353,6 +502,10 @@ async function ensureReport() {
   if (scope === 'provider') {
     const providerId = $('reportProvider')?.value || '';
     return (lastReport && lastReport.scope === 'provider' && lastReport.providerId === providerId) ? lastReport : await renderProviderReport();
+  }
+  if (scope === 'invoice') {
+    const providerId = $('reportProvider')?.value || '';
+    return (lastReport && lastReport.scope === 'invoice' && lastReport.providerId === providerId) ? lastReport : await renderInvoiceReport();
   }
   return (lastReport && (lastReport.scope === 'monthly' || lastReport.scope === 'global')) ? lastReport : generateReport();
 }
@@ -388,6 +541,20 @@ async function prepareEmail() {
       `Valor pendiente por cobrar: ${money(r.totals.owedValue)}\n` +
       `Saldo disponible consolidado: ${r.totals.remaining} h\n\n` +
       `Adjunto el informe completo en PDF/Word exportado desde la plataforma.\n\n` +
+      `Cordialmente,\nYasbleidis López Rhenals`
+    );
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    return;
+  }
+  if (r.scope === 'invoice') {
+    const subject = encodeURIComponent(`Cuenta de cobro SG-SST – ${r.providerName} – ${r.m}`);
+    const body = encodeURIComponent(
+      `Cordial saludo,\n\n` +
+      `Adjunto la cuenta de cobro correspondiente a las actividades ejecutadas para ${r.providerName} durante ${monthLabel(r.m)}.\n\n` +
+      `Total actividades: ${money(r.actTotal)}\n` +
+      `Total desplazamiento y representación: ${money(r.expTotal)}\n` +
+      `TOTAL A COBRAR: ${money(r.grandTotal)}\n\n` +
+      `Quedo atenta a la confirmación de pago.\n\n` +
       `Cordialmente,\nYasbleidis López Rhenals`
     );
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
