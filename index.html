@@ -14,7 +14,7 @@
   (celular, otra sesión abierta, etc.) se queda pegado en una versión vieja
   esperando que alguien limpie el caché a mano.
 -->
-<meta name="build-version" content="2026-09-23T23:06:00Z">
+<meta name="build-version" content="2026-09-23T23:15:00Z">
 <script>
 (function () {
   var CURRENT = document.querySelector('meta[name="build-version"]')?.content || '';
@@ -185,7 +185,7 @@
 </section>
 
 <section id="viaticos" class="section">
-<div class="panel"><div class="panelhead"><h2>Viáticos y gastos de desplazamiento</h2><button class="primary" data-requires-write onclick="openExpenseModal()">+ Registrar gasto</button></div><p class="small">Transporte, alimentación y otros gastos de representación por empresa. Se usan en la sección 2 de la Cuenta de cobro (Informes → Cuenta de cobro).</p><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Empresa / Sede</th><th>Concepto</th><th>Cant.</th><th>Vlr. unitario</th><th>Vlr. total</th><th>Acción</th></tr></thead><tbody id="expensesTable"></tbody></table></div></div>
+<div class="panel"><div class="panelhead"><h2>Viáticos y gastos de desplazamiento</h2><button class="primary" data-requires-write onclick="openExpenseModal()">+ Registrar gasto</button></div><p class="small">Transporte, alimentación y otros gastos de representación por empresa. Se usan en la sección 2 de la Cuenta de cobro (Informes → Cuenta de cobro).</p><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Empresa / Sede</th><th>Concepto</th><th>Valor</th><th>Acción</th></tr></thead><tbody id="expensesTable"></tbody></table></div></div>
 </section>
 
 
@@ -271,10 +271,8 @@
 <div><label>Empresa</label><select id="expCompany"></select></div>
 <div><label>Sede</label><select id="expSite"></select></div>
 <div><label>Fecha</label><input id="expDate" type="date"></div>
-<div><label>Cantidad</label><input id="expQty" type="number" min="0.01" step="0.01" value="1"></div>
-<div><label>Valor unitario</label><input id="expUnitValue" type="number" min="0" step="1000"></div>
-<div><label>Valor total</label><input id="expTotal" readonly></div>
-<div class="full"><label>Concepto</label><input id="expConcept" placeholder="Ej: Transporte a sede, alimentación..."></div>
+<div><label>Valor</label><input id="expAmount" type="number" min="0" step="1000"></div>
+<div class="full"><label>Concepto</label><input id="expConcept" placeholder="Ej: Transporte y alimentación a sede..."></div>
 </div>
 <div class="actions"><button class="secondary" onclick="closeModal('expenseModal')">Cancelar</button><button class="primary" onclick="saveExpense()">Guardar gasto</button></div></div></div>
 
