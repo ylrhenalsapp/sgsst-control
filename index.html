@@ -14,7 +14,7 @@
   (celular, otra sesión abierta, etc.) se queda pegado en una versión vieja
   esperando que alguien limpie el caché a mano.
 -->
-<meta name="build-version" content="2026-09-23T02:00:00Z">
+<meta name="build-version" content="2026-09-23T23:06:00Z">
 <script>
 (function () {
   var CURRENT = document.querySelector('meta[name="build-version"]')?.content || '';
@@ -107,6 +107,7 @@
     <a href="#actividades" onclick="showSection('actividades',this)"><span class="navIcon iconPurple">📋</span>Actividades</a>
     <a href="#horas" onclick="showSection('horas',this)"><span class="navIcon iconGreen">⏱️</span>Registro de horas</a>
     <a href="#evidencias" onclick="showSection('evidencias',this)"><span class="navIcon iconOrange">📎</span>Evidencias y links</a>
+    <a href="#viaticos" onclick="showSection('viaticos',this)"><span class="navIcon iconRed">🚗</span>Viáticos</a>
     <a href="#calendario" onclick="showSection('calendario',this);renderCalendar()"><span class="navIcon iconTeal">🗓️</span>Calendario</a>
     <a href="#informes" onclick="showSection('informes',this)"><span class="navIcon iconOrange">📄</span>Informes</a>
     <a href="#configuracion" onclick="showSection('configuracion',this)"><span class="navIcon iconPurple">⚙️</span>Configuración</a>
@@ -183,6 +184,10 @@
 <div class="panel"><div class="panelhead"><h2>Evidencias y enlaces</h2><button class="primary" data-requires-write onclick="openEvidenceModal()">+ Cargar evidencia</button></div><p class="small">Puedes adjuntar un archivo real (se guarda en Supabase Storage) o registrar un enlace de Google Drive, OneDrive, SharePoint u otra ubicación.</p><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Actividad</th><th>Descripción</th><th>Archivo / Link</th><th>Acción</th></tr></thead><tbody id="evidenceTable"></tbody></table></div></div>
 </section>
 
+<section id="viaticos" class="section">
+<div class="panel"><div class="panelhead"><h2>Viáticos y gastos de desplazamiento</h2><button class="primary" data-requires-write onclick="openExpenseModal()">+ Registrar gasto</button></div><p class="small">Transporte, alimentación y otros gastos de representación por empresa. Se usan en la sección 2 de la Cuenta de cobro (Informes → Cuenta de cobro).</p><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Empresa / Sede</th><th>Concepto</th><th>Cant.</th><th>Vlr. unitario</th><th>Vlr. total</th><th>Acción</th></tr></thead><tbody id="expensesTable"></tbody></table></div></div>
+</section>
+
 
 <section id="calendario" class="section">
   <div class="calendarHero">
@@ -214,7 +219,7 @@
 <section id="informes" class="section">
 <div class="panel">
 <div class="panelhead"><h2>Generador de informes</h2><div><button class="success" onclick="generateReport()">↻ Actualizar</button> <button class="secondary" onclick="exportReportPDF()">📕 Exportar PDF</button> <button class="secondary" onclick="exportReportWord()">📘 Exportar Word</button> <button class="primary" onclick="prepareEmail()">📩 Preparar correo</button></div></div>
-<div class="formgrid" style="margin-bottom:16px"><div><label>Tipo de informe</label><select id="reportScope" onchange="generateReport()"><option value="monthly">Informe mensual</option><option value="global">Informe histórico de la sede</option><option value="all">Informe general · todas las empresas</option><option value="provider">Informe por proveedor</option></select></div><div><label>Periodo de referencia</label><input id="reportMonth" type="month"></div></div>
+<div class="formgrid" style="margin-bottom:16px"><div><label>Tipo de informe</label><select id="reportScope" onchange="generateReport()"><option value="monthly">Informe mensual</option><option value="global">Informe histórico de la sede</option><option value="all">Informe general · todas las empresas</option><option value="provider">Informe por proveedor</option><option value="invoice">Cuenta de cobro</option></select></div><div><label>Periodo de referencia</label><input id="reportMonth" type="month"></div></div>
 <div id="reportProviderWrap" style="display:none;margin-bottom:16px"><label>Proveedor</label><select id="reportProvider" onchange="generateReport()"></select></div>
 <div id="reportBox" class="report">Selecciona empresa, sede y periodo y genera el informe.</div>
 </div>
@@ -226,9 +231,11 @@
  <button onclick="showConfig('sites',this)">Sedes y horas</button>
  <button onclick="showConfig('rates',this)">Tarifas</button>
  <button onclick="showConfig('tasks',this)">Actividades</button>
+ <button onclick="showConfig('providers',this)">Proveedores</button>
+ <button onclick="showConfig('mydata',this)">Mis datos</button>
  <button onclick="showConfig('migration',this)">Migración de datos</button>
 </div>
-<div id="cfg-companies" class="panel"></div><div id="cfg-sites" class="panel" style="display:none"></div><div id="cfg-rates" class="panel" style="display:none"></div><div id="cfg-tasks" class="panel" style="display:none"></div>
+<div id="cfg-companies" class="panel"></div><div id="cfg-sites" class="panel" style="display:none"></div><div id="cfg-rates" class="panel" style="display:none"></div><div id="cfg-tasks" class="panel" style="display:none"></div><div id="cfg-providers" class="panel" style="display:none"></div><div id="cfg-mydata" class="panel" style="display:none"></div>
 <div id="cfg-migration" class="panel" style="display:none">
   <div class="panelhead"><h2>Migración de datos del navegador anterior</h2></div>
   <p class="small">Si esta plataforma reemplaza a la versión anterior (que guardaba todo en este navegador), pulsa el botón para copiar esos datos a la base de datos. Hazlo una sola vez, desde el mismo computador donde usabas la versión anterior.</p>
@@ -258,6 +265,18 @@
 <div class="full"><label>Descripción / resultado</label><textarea id="hNotes" placeholder="¿Qué se realizó?"></textarea></div>
 </div>
 <div class="actions"><button class="secondary" onclick="closeModal('hoursModal')">Cancelar</button><button class="primary" onclick="saveHours()">Guardar registro</button></div></div></div>
+
+<div class="modal" id="expenseModal"><div class="modalbox"><h2 id="expenseModalTitle">Registrar gasto</h2>
+<div class="formgrid">
+<div><label>Empresa</label><select id="expCompany"></select></div>
+<div><label>Sede</label><select id="expSite"></select></div>
+<div><label>Fecha</label><input id="expDate" type="date"></div>
+<div><label>Cantidad</label><input id="expQty" type="number" min="0.01" step="0.01" value="1"></div>
+<div><label>Valor unitario</label><input id="expUnitValue" type="number" min="0" step="1000"></div>
+<div><label>Valor total</label><input id="expTotal" readonly></div>
+<div class="full"><label>Concepto</label><input id="expConcept" placeholder="Ej: Transporte a sede, alimentación..."></div>
+</div>
+<div class="actions"><button class="secondary" onclick="closeModal('expenseModal')">Cancelar</button><button class="primary" onclick="saveExpense()">Guardar gasto</button></div></div></div>
 
 <div class="modal" id="activityModal"><div class="modalbox"><h2>Registrar avance de actividad</h2>
 <div class="formgrid">
