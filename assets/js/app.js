@@ -1220,25 +1220,38 @@ async function removeCompany(id) { if (state.companies.length <= 1) return toast
 // site_activities, en un solo flujo.
 // ---------------------------------------------------------------------------
 let wizardMode = 'company'; // 'company' (empresa nueva) | 'site' (sede nueva en empresa existente)
-let wizardStep = 1;
+let wizardStepKey = 'company';
 let wizardSelectedActivityIds = new Set();
 let wizardNewActivities = [];
+let wizardSelectedProviderId = null;
+
+// Secuencia de pasos por modo: al crear una empresa nueva se pide primero el
+// proveedor (paso 1), y de ahí sigue el flujo de siempre. Al agregar una sede
+// a una empresa existente el proveedor ya está definido, así que ese paso se
+// omite.
+const WIZARD_STEPS = {
+  company: ['provider', 'company', 'site', 'activities'],
+  site: ['company', 'site', 'activities'],
+};
+const WIZARD_PANE_ID = { provider: 'wizardPaneProvider', company: 'wizardPane1', site: 'wizardPane2', activities: 'wizardPane3' };
+const WIZARD_STEP_LABEL = { provider: 'Proveedor', company: 'Empresa', site: 'Sede', activities: 'Actividades' };
 
 function openCompanyWizard() {
-  wizardMode = 'company'; wizardSelectedActivityIds = new Set(); wizardNewActivities = [];
+  wizardMode = 'company'; wizardSelectedActivityIds = new Set(); wizardNewActivities = []; wizardSelectedProviderId = null;
   $('wizardTitle').textContent = 'Agregar empresa';
   $('wizStepCompanyNew').style.display = 'block';
   $('wizStepCompanyExisting').style.display = 'none';
   $('wizCompanyName').value = '';
   $('wizSiteName').value = ''; $('wizSiteHours').value = 0;
   $('wizNewActivityName').value = '';
-  wizardShowStep(1);
+  renderWizardStepsBar();
+  wizardShowStep(WIZARD_STEPS.company[0]);
   openModal('companyWizardModal');
 }
 
 function openSiteWizard() {
   if (!state.companies.length) return toast('Primero agrega una empresa.');
-  wizardMode = 'site'; wizardSelectedActivityIds = new Set(); wizardNewActivities = [];
+  wizardMode = 'site'; wizardSelectedActivityIds = new Set(); wizardNewActivities = []; wizardSelectedProviderId = null;
   $('wizardTitle').textContent = 'Agregar sede';
   $('wizStepCompanyNew').style.display = 'none';
   $('wizStepCompanyExisting').style.display = 'block';
@@ -1246,17 +1259,42 @@ function openSiteWizard() {
   $('wizCompanySelect').value = company()?.id || state.companies[0].id;
   $('wizSiteName').value = ''; $('wizSiteHours').value = 0;
   $('wizNewActivityName').value = '';
-  wizardShowStep(1);
+  renderWizardStepsBar();
+  wizardShowStep(WIZARD_STEPS.site[0]);
   openModal('companyWizardModal');
 }
 
-function wizardShowStep(n) {
-  wizardStep = n;
-  [1, 2, 3].forEach(i => $('wizardPane' + i).style.display = i === n ? 'block' : 'none');
-  document.querySelectorAll('.wizardStep').forEach(el => el.classList.toggle('active', Number(el.dataset.step) === n));
-  $('wizBackBtn').style.display = n > 1 ? 'inline-block' : 'none';
-  $('wizNextBtn').textContent = n === 3 ? 'Guardar' : 'Siguiente';
-  if (n === 3) renderWizardActivities();
+function renderWizardStepsBar() {
+  const steps = WIZARD_STEPS[wizardMode];
+  $('wizardStepsBar').innerHTML = steps.map((k, i) => `<span class="wizardStep" data-step="${k}">${i + 1}. ${WIZARD_STEP_LABEL[k]}</span>`).join('');
+}
+
+function renderWizardProviderSelect() {
+  $('wizProviderSelect').innerHTML = '<option value="">Sin proveedor</option>' + state.providers.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  $('wizProviderSelect').value = wizardSelectedProviderId || '';
+}
+
+async function wizardAddProviderPrompt() {
+  const n = prompt('Nombre del nuevo proveedor:');
+  if (!n?.trim()) return;
+  const { data, error } = await sb.from('providers').insert({ name: n.trim() }).select('id').single();
+  if (error) return toast('No se pudo crear el proveedor: ' + error.message);
+  state.providers.push({ id: data.id, name: n.trim() });
+  wizardSelectedProviderId = data.id;
+  renderWizardProviderSelect();
+  toast('Proveedor agregado.');
+}
+
+function wizardShowStep(key) {
+  wizardStepKey = key;
+  const steps = WIZARD_STEPS[wizardMode];
+  Object.entries(WIZARD_PANE_ID).forEach(([k, id]) => { const el = $(id); if (el) el.style.display = k === key ? 'block' : 'none'; });
+  document.querySelectorAll('.wizardStep').forEach(el => el.classList.toggle('active', el.dataset.step === key));
+  const idx = steps.indexOf(key);
+  $('wizBackBtn').style.display = idx > 0 ? 'inline-block' : 'none';
+  $('wizNextBtn').textContent = idx === steps.length - 1 ? 'Guardar' : 'Siguiente';
+  if (key === 'activities') renderWizardActivities();
+  if (key === 'provider') renderWizardProviderSelect();
 }
 
 function renderWizardActivities() {
@@ -1282,22 +1320,28 @@ function wizardAddNewActivity() {
 }
 function wizardRemoveNewActivity(i) { wizardNewActivities.splice(i, 1); renderWizardActivities(); }
 
-function wizardBack() { if (wizardStep > 1) wizardShowStep(wizardStep - 1); }
+function wizardBack() {
+  const steps = WIZARD_STEPS[wizardMode];
+  const idx = steps.indexOf(wizardStepKey);
+  if (idx > 0) wizardShowStep(steps[idx - 1]);
+}
 
 async function wizardNext() {
-  if (wizardStep === 1) {
+  const steps = WIZARD_STEPS[wizardMode];
+  const idx = steps.indexOf(wizardStepKey);
+  if (wizardStepKey === 'provider') {
+    wizardSelectedProviderId = $('wizProviderSelect').value || null;
+  } else if (wizardStepKey === 'company') {
     if (wizardMode === 'company') {
       if (!$('wizCompanyName').value.trim()) return toast('Ingresa el nombre de la empresa');
     } else if (!$('wizCompanySelect').value) {
       return toast('Selecciona una empresa');
     }
-    return wizardShowStep(2);
-  }
-  if (wizardStep === 2) {
+  } else if (wizardStepKey === 'site') {
     if (!$('wizSiteName').value.trim()) return toast('Ingresa el nombre de la sede');
-    return wizardShowStep(3);
   }
-  await wizardSave();
+  if (idx === steps.length - 1) return await wizardSave();
+  wizardShowStep(steps[idx + 1]);
 }
 
 // Código de Postgres para "unique_violation" (ej: nombre de empresa/sede
@@ -1313,11 +1357,19 @@ async function wizardSave() {
     let companyId, companyName, companyWasCreated = false;
     if (wizardMode === 'company') {
       companyName = $('wizCompanyName').value.trim();
-      const { data, error } = await sb.from('companies').insert({ name: companyName, rate: state.rate }).select('id').single();
+      const { data, error } = await sb.from('companies').insert({ name: companyName, rate: state.rate, provider_id: wizardSelectedProviderId || null }).select('id').single();
       if (error && error.code === PG_UNIQUE_VIOLATION) {
         const { data: existing, error: findError } = await sb.from('companies').select('id').eq('name', companyName).maybeSingle();
         if (findError || !existing) return toast('Ya existe una empresa con ese nombre, pero no se pudo recuperar: ' + (findError?.message || 'sin detalle'));
         companyId = existing.id;
+        // Si la empresa ya existía sin proveedor asignado y en el wizard se
+        // eligió uno, lo completamos en vez de dejarlo pasar por alto.
+        if (wizardSelectedProviderId) {
+          const { data: existingFull } = await sb.from('companies').select('provider_id').eq('id', companyId).maybeSingle();
+          if (existingFull && !existingFull.provider_id) {
+            await sb.from('companies').update({ provider_id: wizardSelectedProviderId }).eq('id', companyId);
+          }
+        }
         toast('Ya existía una empresa con ese nombre — se usará esa y se continúa con la sede.');
       } else if (error) {
         return toast(error.message);
