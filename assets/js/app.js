@@ -43,6 +43,7 @@ let state = {
   statusMap: {},   // `${siteId}|${activityId}` -> 'Pendiente'|'En proceso'|'Completada'
   targetsMap: {},  // `${siteId}|${activityId}` -> target_hours (solo si hay meta configurada)
   siteActivities: [], // [{site_id, activity_id}] -> qué actividades del catálogo aplican a cada sede
+  providers: [], // [{id,name}] catálogo de proveedores (ARL, etc.) — una empresa puede no tener proveedor asignado
   closedMonths: new Set(), // `${siteId}|${'YYYY-MM'}` -> mes cerrado (no admite horas nuevas ni edición)
   bag: { assigned: 0, additional: 0, carry: 0, total: 0, used: 0, remaining: 0 },
   bagExists: false,
@@ -200,6 +201,22 @@ async function init() {
   state.activities = activities || [];
   if (rateRow) state.rate = Number(rateRow.value);
   state.siteActivities = siteActs || [];
+
+  // Proveedores: en consultas aparte y "a prueba de fallos" — si todavía no
+  // se corrió la migración que crea "providers"/"companies.provider_id" en
+  // Supabase, esto falla en silencio y el resto de la app sigue funcionando
+  // normal (solo no se muestra columna de proveedor todavía).
+  try {
+    const [{ data: providers }, { data: companyProviders }] = await Promise.all([
+      sb.from('providers').select('id,name').order('name'),
+      sb.from('companies').select('id,provider_id'),
+    ]);
+    state.providers = providers || [];
+    const provMap = new Map((companyProviders || []).map(cp => [cp.id, cp.provider_id]));
+    state.companies.forEach(c => { c.provider_id = provMap.get(c.id) ?? null; });
+  } catch (e) {
+    state.providers = [];
+  }
 
   $('filterMonth').value = monthNow();
   if ($('calendarDate')) $('calendarDate').value = today();
@@ -1004,7 +1021,10 @@ async function renderConfig() {
   // Una empresa sin ninguna sede queda "inactiva" (se puede eliminar su
   // última sede sin que eso borre la empresa) — se marca aquí para que se
   // note de un vistazo que necesita una sede nueva para volver a operar.
-  $('cfg-companies').innerHTML = `<div class="panelhead"><h2>Empresas</h2><button class="primary" data-requires-write onclick="openCompanyWizard()">+ Agregar empresa</button></div><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sedes</th><th>Estado</th><th></th></tr></thead><tbody>${state.companies.map(c => `<tr><td>${c.name}</td><td>${c.sites.length}</td><td>${c.sites.length ? '<span class="badge done">Activa</span>' : '<span class="badge pending" title="Sin sedes: agrega una desde Sedes y horas para activarla">Inactiva</span>'}</td><td><button class="danger" data-requires-write onclick="removeCompany('${c.id}')">Eliminar</button></td></tr>`).join('')}</tbody></table></div>`;
+  // La columna "Proveedor" queda siempre visible (no depende de si la
+  // empresa ya tiene uno asignado) para que quede presente al editar
+  // cualquier empresa, y así asignarlo/cambiarlo cuando haga falta.
+  $('cfg-companies').innerHTML = `<div class="panelhead"><h2>Empresas</h2><button class="primary" data-requires-write onclick="openCompanyWizard()">+ Agregar empresa</button></div><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sedes</th><th>Proveedor</th><th>Estado</th><th></th></tr></thead><tbody>${state.companies.map(c => `<tr><td>${c.name}</td><td>${c.sites.length}</td><td><select id="prov-${c.id}" style="min-width:190px"><option value="">Sin proveedor</option>${state.providers.map(p => `<option value="${p.id}" ${c.provider_id === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}</select> <button class="secondary" data-requires-write onclick="updateCompanyProvider('${c.id}')">Guardar</button></td><td>${c.sites.length ? '<span class="badge done">Activa</span>' : '<span class="badge pending" title="Sin sedes: agrega una desde Sedes y horas para activarla">Inactiva</span>'}</td><td><button class="danger" data-requires-write onclick="removeCompany('${c.id}')">Eliminar</button></td></tr>`).join('')}</tbody></table></div>`;
 
   const rows = [];
   for (const c of state.companies) {
@@ -1391,6 +1411,17 @@ async function updateCompanyRate(id) {
   if (c) c.rate = v;
   toast(`Tarifa actualizada para ${c?.name || 'la empresa'}.`);
   renderDashboard();
+}
+
+async function updateCompanyProvider(id) {
+  const select = $('prov-' + id);
+  const providerId = select?.value || null;
+  const { error } = await sb.from('companies').update({ provider_id: providerId }).eq('id', id);
+  if (error) return toast('No se pudo actualizar el proveedor: ' + error.message + (error.message?.includes('provider_id') ? ' (falta correr la migración 0011_providers.sql en Supabase).' : ''));
+  const c = state.companies.find(x => x.id === id);
+  if (c) c.provider_id = providerId;
+  const providerName = state.providers.find(p => p.id === providerId)?.name;
+  toast(providerName ? `${c?.name || 'Empresa'} asignada a ${providerName}.` : `${c?.name || 'Empresa'} quedó sin proveedor.`);
 }
 async function addTaskPrompt() { const n = prompt('Nombre de la nueva actividad:'); if (!n?.trim()) return; const { error } = await sb.from('activities').insert({ name: n.trim(), is_fixed: false }); if (error) return toast(error.message); logActivity('activities_loaded', `Se agregó la actividad "${n.trim()}" al catálogo.`); await init(); toast('Actividad agregada'); }
 // Corrige el nombre de una actividad del catálogo (por ejemplo, si quedó mal

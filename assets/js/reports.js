@@ -37,7 +37,11 @@ function generateReport() {
 
     const bag = state.bag, bagRemainingValue = bag.remaining * companyRate(c);
     const ev = state.evidencesSite.filter(x => scope === 'global' || monthOf(x.record_date) === m);
-    const acts = state.activities.map((t, i) => {
+    // Solo las actividades que quedaron asignadas a ESTA sede (Configuración
+    // → Sedes y horas → Actividades), no el catálogo global completo — antes
+    // el informe mostraba actividades que no tenían nada que ver con la
+    // empresa.
+    const acts = activitiesForSite(s.id).map((t, i) => {
       const st = taskStatus(s.id, t.id), hrs = scope === 'global' ? taskHours(s.id, t.id) : taskMonthHours(s.id, t.id, m);
       const target = activityTarget(s.id, t.id);
       return { name: t.name, status: st, hours: hrs, target, icon: actIcon(i) };
@@ -57,7 +61,6 @@ function generateReport() {
       ? `${completedCount} de ${totalActs} actividad(es) completadas`
       : `${bag.used} h de ${bag.total} h de la bolsa asignada`;
     const carteraOk = owedValue <= 0;
-    const pendingActs = acts.filter(a => a.status !== 'Completada');
 
     const finRows = scope === 'global'
       ? [
@@ -80,13 +83,6 @@ function generateReport() {
         ? 'En cuanto al componente financiero, no se registran valores pendientes de pago; la cartera se encuentra al día.'
         : `En cuanto al componente financiero, se encuentra pendiente un valor de ${money(owedValue)}, correspondiente a los servicios ejecutados durante el periodo.`,
     ];
-
-    const actionsList = [];
-    pendingActs.forEach(a => actionsList.push(`${a.status === 'En proceso' ? 'Continuar con' : 'Iniciar'} ${a.name.charAt(0).toLowerCase() + a.name.slice(1)}.`));
-    if (!carteraOk) actionsList.push(`Gestionar el cobro del valor pendiente (${money(owedValue)}).`);
-    actionsList.push('Validar el saldo de horas disponible.');
-    actionsList.push('Mantener el cumplimiento legal y normativo.');
-    if (!pendingActs.length && carteraOk) actionsList.unshift('Definir nuevas actividades según las necesidades identificadas.');
 
     $('reportBox').innerHTML = `
     <div class="reportTopBar">
@@ -157,20 +153,11 @@ function generateReport() {
       ${rows.length ? [...rows].sort((a, b) => b.record_date.localeCompare(a.record_date)).map(x => `<tr><td>${x.record_date}</td><td>${taskName(x.activity_id)}</td><td>${x.hours}</td><td>${money(x.rate)}</td><td>${money(x.hours * x.rate)}</td><td><span class="badge ${x.paid ? 'paid' : 'unpaid'}">${x.paid ? '✓ Pagado' : '⏳ Pendiente'}</span></td></tr>`).join('') : '<tr><td colspan="6" class="empty">Sin registros en este periodo.</td></tr>'}
     </tbody></table></div>
 
-    <div class="reportGrid2" style="margin-top:22px">
-      <div>
-        <div class="reportSectionTitle">🎯 7. Próximas acciones</div>
-        <ul class="reportActionsList">${actionsList.map(a => `<li>${a}</li>`).join('')}</ul>
-        <p class="small" style="margin-top:14px">Las horas asignadas normalmente se registran durante los primeros 5 días del mes. El saldo no ejecutado se traslada automáticamente al siguiente mes como saldo a favor.</p>
-      </div>
-      <div>
-        <div class="reportSectionTitle">✍️ 8. Elaborado por</div>
-        <div class="reportSignatureBlock"><img src="${REPORT_SIGNATURE_B64}" alt="Yasbleidis López Rhenals · SST Asesorías y Consultorías"></div>
-      </div>
-    </div>
+    <div class="reportSectionTitle" style="margin-top:22px">✍️ 7. Elaborado por</div>
+    <div class="reportSignatureBlock"><img src="${REPORT_SIGNATURE_B64}" alt="Yasbleidis López Rhenals · SST Asesorías y Consultorías"></div>
     `;
     toast('Informe generado');
-    lastReport = { c, s, m, scope, used, executed, paidValue, owedValue, paidCount, owedCount, monthValue, bagRemainingValue, ev, bag, acts, rows, title, subtitle, genDate, avancePct, avanceSub, carteraOk, analysisParas, actionsList, finRows };
+    lastReport = { c, s, m, scope, used, executed, paidValue, owedValue, paidCount, owedCount, monthValue, bagRemainingValue, ev, bag, acts, rows, title, subtitle, genDate, avancePct, avanceSub, carteraOk, analysisParas, finRows };
     return lastReport;
   } catch (err) {
     console.error('Error generando el informe:', err);
