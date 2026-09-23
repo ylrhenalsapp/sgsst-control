@@ -52,15 +52,16 @@ create policy advisor_profile_write on public.advisor_profile for all
 
 -- 3) Registro de viáticos / gastos de desplazamiento y representación, ligado
 --    a empresa y sede igual que hour_records, para que se agrupen solos por
---    proveedor (vía companies.provider_id) al generar la cuenta de cobro.
+--    proveedor (vía companies.provider_id) al generar la cuenta de cobro. Un
+--    solo valor por registro (no cantidad × valor unitario): un mismo gasto
+--    puede juntar transporte, alimentación, etc. en un solo concepto.
 create table public.expenses (
   id          uuid primary key default gen_random_uuid(),
   company_id  uuid not null references public.companies(id) on delete cascade,
   site_id     uuid not null references public.sites(id) on delete cascade,
   record_date date not null,
   concept     text not null,
-  quantity    numeric not null default 1,
-  unit_value  numeric not null default 0,
+  amount      numeric not null default 0,
   created_by  uuid references public.profiles(id),
   created_at  timestamptz not null default now()
 );
