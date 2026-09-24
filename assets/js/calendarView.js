@@ -137,15 +137,24 @@ async function sendScheduleInvite(id) {
   if (!e.leader_email) return toast('Esta cita no tiene correo del líder registrado.');
   const { data: { session } } = await sb.auth.getSession();
   if (!session) return toast('Tu sesión expiró, vuelve a iniciar sesión.');
+  const c = state.companies.find(x => x.id === e.company_id), s = c?.sites.find(x => x.id === e.site_id);
   const subject = `Confirmación de sesión – ${taskName(e.activity_id)}`;
   const text = leaderEmailBody(e);
   const ics = buildIcsContent(e, { method: 'REQUEST', leaderCn: e.leader_name || 'Líder', leaderEmail: e.leader_email });
+  // "details" son los campos ya resueltos (nombres, no solo ids) para que la
+  // función serverless arme la versión bonita del correo (con logo y
+  // colores) sin tener que volver a consultar la base de datos.
+  const details = {
+    leaderName: e.leader_name || 'Líder', activityName: taskName(e.activity_id),
+    companyName: c?.name || '', siteName: s?.name || '', dateFormatted: formatDate(e.event_date),
+    time: e.event_time, durationMinutes: e.duration_minutes, notes: e.notes || '',
+  };
   toast('Enviando citación…');
   try {
     const resp = await fetch('/api/send-schedule-invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ to: e.leader_email, subject, text, ics, filename: `citacion-${e.event_date}.ics` }),
+      body: JSON.stringify({ to: e.leader_email, subject, text, ics, filename: `citacion-${e.event_date}.ics`, details }),
     });
     const out = await resp.json().catch(() => ({}));
     if (!resp.ok) return toast('No se pudo enviar la citación: ' + (out.error || resp.statusText));
