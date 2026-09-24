@@ -14,7 +14,7 @@
   (celular, otra sesión abierta, etc.) se queda pegado en una versión vieja
   esperando que alguien limpie el caché a mano.
 -->
-<meta name="build-version" content="2026-09-23T23:25:00Z">
+<meta name="build-version" content="2026-09-24T01:41:00Z">
 <script>
 (function () {
   var CURRENT = document.querySelector('meta[name="build-version"]')?.content || '';
@@ -323,6 +323,16 @@
     <button class="secondary" onclick="closeModal('companyWizardModal')">Cancelar</button>
     <button class="secondary" id="wizBackBtn" style="display:none" onclick="wizardBack()">Atrás</button>
     <button class="primary" id="wizNextBtn" onclick="wizardNext()">Siguiente</button>
+  </div>
+</div></div>
+<div class="modal" id="deleteCompanyModal"><div class="modalbox" style="width:min(560px,100%)">
+  <h2>⚠️ Eliminar empresa</h2>
+  <div id="delCompanySummary"></div>
+  <label style="margin-top:14px;display:block">Para confirmar, escribe el nombre exacto de la empresa: <b id="delCompanyName"></b></label>
+  <input id="delCompanyConfirmInput" placeholder="Nombre de la empresa" oninput="checkDeleteCompanyConfirm()">
+  <div class="actions">
+    <button class="secondary" onclick="closeModal('deleteCompanyModal')">Cancelar</button>
+    <button class="danger" id="delCompanyConfirmBtn" disabled onclick="executeDeleteCompany()">Eliminar definitivamente</button>
   </div>
 </div></div>
 <div class="modal" id="siteActivitiesModal"><div class="modalbox">
