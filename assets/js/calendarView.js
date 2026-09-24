@@ -6,6 +6,13 @@
  * calendario visual real (FullCalendar) de día/semana/mes con arrastre.
  */
 function scheduleCompanyChanged() { fillSiteSelect('scCompany', 'scSite'); }
+// La sede física solo tiene sentido para sesiones presenciales — si se
+// marca Virtual, se oculta ese campo (la sede sigue guardándose por dentro,
+// con el valor ya seleccionado, solo para efectos de registro/reportes).
+function scheduleModalityChanged() {
+  const wrap = $('scSiteWrap');
+  if (wrap) wrap.style.display = $('scModality')?.value === 'virtual' ? 'none' : '';
+}
 
 // ---------------------------------------------------------------------------
 // "Ver todas las citas": por defecto el calendario (agenda del día y vista
@@ -51,6 +58,7 @@ function openScheduleModal() {
   $('scCompany').value = company().id; fillSiteSelect('scCompany', 'scSite'); $('scSite').value = site().id;
   $('scLeader').value = ''; $('scEmail').value = ''; $('scProposedDate').value = ''; $('scProposedTime').value = '';
   $('scDate').value = $('calendarDate')?.value || today(); $('scTime').value = '09:00'; $('scDuration').value = 60; $('scReminder').value = '30'; $('scNotes').value = '';
+  if ($('scModality')) $('scModality').value = 'presencial'; scheduleModalityChanged();
   checkScheduleAvailability(); openModal('scheduleModal');
 }
 function eventDateTime(e) { return new Date(`${e.event_date}T${e.event_time}`); }
@@ -80,7 +88,11 @@ function checkScheduleAvailability() {
 }
 function leaderEmailBody(e) {
   const c = state.companies.find(x => x.id === e.company_id), s = c?.sites.find(x => x.id === e.site_id);
-  return `Buenas tardes, señor(a) ${e.leader_name || '[Nombre del líder]'},\n\nDe acuerdo con la conversación establecida y la disponibilidad informada, le confirmo que tendremos la sesión correspondiente a la actividad:\n\nActividad: ${taskName(e.activity_id)}\nEmpresa: ${c?.name || ''}\nSede: ${s?.name || ''}\nFecha: ${formatDate(e.event_date)}\nHora: ${e.event_time}\nDuración estimada: ${e.duration_minutes} minutos\n\nAgradezco tener en cuenta esta programación para el desarrollo de la actividad.\n\nCordialmente,\nYasbleidis López Rhenals\nFisioterapeuta · Especialista en Gerencia de la Seguridad y Salud en el Trabajo`;
+  const isVirtual = e.modality === 'virtual';
+  const modalityLine = isVirtual
+    ? `Modalidad: Virtual (Google Meet)${e.meet_link ? '\nEnlace: ' + e.meet_link : ''}`
+    : `Modalidad: Presencial\nSede: ${s?.name || ''}`;
+  return `Buenas tardes, señor(a) ${e.leader_name || '[Nombre del líder]'},\n\nDe acuerdo con la conversación establecida y la disponibilidad informada, le confirmo que tendremos la sesión correspondiente a la actividad:\n\nActividad: ${taskName(e.activity_id)}\nEmpresa: ${c?.name || ''}\n${modalityLine}\nFecha: ${formatDate(e.event_date)}\nHora: ${e.event_time}\nDuración estimada: ${e.duration_minutes} minutos\n\nAgradezco tener en cuenta esta programación para el desarrollo de la actividad.\n\nCordialmente,\nYasbleidis López Rhenals\nFisioterapeuta · Especialista en Gerencia de la Seguridad y Salud en el Trabajo`;
 }
 function formatDate(d) { if (!d) return ''; return new Date(d + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }); }
 function googleCalendarUrl(e) {
@@ -88,7 +100,8 @@ function googleCalendarUrl(e) {
   const start = eventDateTime(e), end = eventEnd(e);
   const fmt = d => d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + 'T' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + '00';
   const title = `${taskName(e.activity_id)} · ${c?.name || ''} · ${s?.name || ''}`;
-  const details = `Sesión programada por Yasbleidis López Rhenals.\nLíder: ${e.leader_name || '-'}\nDisponibilidad informada: ${e.proposed_date || '-'} ${e.proposed_time || ''}\n${e.notes || ''}`;
+  const meetLine = e.modality === 'virtual' && e.meet_link ? `\nGoogle Meet: ${e.meet_link}` : '';
+  const details = `Sesión programada por Yasbleidis López Rhenals.\nLíder: ${e.leader_name || '-'}\nDisponibilidad informada: ${e.proposed_date || '-'} ${e.proposed_time || ''}${meetLine}\n${e.notes || ''}`;
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${fmt(start)}/${fmt(end)}&details=${encodeURIComponent(details)}`;
 }
 async function saveSchedule(openGoogle, sendEmail) {
@@ -101,6 +114,7 @@ async function saveSchedule(openGoogle, sendEmail) {
     duration_minutes: Number($('scDuration').value || 60), leader_name: $('scLeader').value.trim(), leader_email: $('scEmail').value.trim(),
     proposed_date: $('scProposedDate').value || null, proposed_time: $('scProposedTime').value || null,
     reminder_minutes: Number($('scReminder').value || 30), notes: $('scNotes').value.trim(), created_by: currentProfile?.id,
+    modality: $('scModality')?.value || 'presencial',
   }).select().single();
   if (error) {
     if (error.code === '23P01') return toast('Ese horario ya está ocupado por otra sesión en esta sede (bloqueado por la base de datos).');
@@ -124,7 +138,8 @@ function buildIcsContent(e, { method = 'PUBLISH', leaderCn = '', leaderEmail = '
   const invite = (method === 'REQUEST' && leaderEmail)
     ? `\r\nORGANIZER;CN=Yasbleidis López Rhenals:mailto:notificaciones@yasbleidislopez.com\r\nATTENDEE;CN=${leaderCn || 'Líder'};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${leaderEmail}`
     : '';
-  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//SG-SST Control//Agenda//ES\r\nCALSCALE:GREGORIAN\r\nMETHOD:${method}\r\nBEGIN:VEVENT\r\nUID:${e.id}@sgsst-control\r\nDTSTAMP:${utc(new Date())}\r\nDTSTART:${utc(start)}\r\nDTEND:${utc(end)}\r\nSEQUENCE:0\r\nSTATUS:CONFIRMED${invite}\r\nSUMMARY:${title}\r\nDESCRIPTION:${desc}\r\nBEGIN:VALARM\r\nTRIGGER:-PT${Math.max(1, Number(e.reminder_minutes || 30))}M\r\nACTION:DISPLAY\r\nDESCRIPTION:Recordatorio de actividad SG-SST\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR`;
+  const location = e.modality === 'virtual' && e.meet_link ? `\r\nLOCATION:${e.meet_link}` : '';
+  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//SG-SST Control//Agenda//ES\r\nCALSCALE:GREGORIAN\r\nMETHOD:${method}\r\nBEGIN:VEVENT\r\nUID:${e.id}@sgsst-control\r\nDTSTAMP:${utc(new Date())}\r\nDTSTART:${utc(start)}\r\nDTEND:${utc(end)}\r\nSEQUENCE:0\r\nSTATUS:CONFIRMED${invite}${location}\r\nSUMMARY:${title}\r\nDESCRIPTION:${desc}\r\nBEGIN:VALARM\r\nTRIGGER:-PT${Math.max(1, Number(e.reminder_minutes || 30))}M\r\nACTION:DISPLAY\r\nDESCRIPTION:Recordatorio de actividad SG-SST\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR`;
 }
 // Envía la citación real por correo (con el .ics de invitación adjunto) a
 // través de la función serverless /api/send-schedule-invite, que habla con
@@ -147,18 +162,37 @@ async function sendScheduleInvite(id) {
   const details = {
     leaderName: e.leader_name || 'Líder', activityName: taskName(e.activity_id),
     companyName: c?.name || '', siteName: s?.name || '', dateFormatted: formatDate(e.event_date),
-    time: e.event_time, durationMinutes: e.duration_minutes, notes: e.notes || '',
+    time: e.event_time, durationMinutes: e.duration_minutes, notes: e.notes || '', modality: e.modality || 'presencial',
   };
   toast('Enviando citación…');
   try {
     const resp = await fetch('/api/send-schedule-invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ to: e.leader_email, subject, text, ics, filename: `citacion-${e.event_date}.ics`, details }),
+      body: JSON.stringify({
+        to: e.leader_email, subject, text, ics, filename: `citacion-${e.event_date}.ics`, details,
+        eventDate: e.event_date, eventTime: e.event_time, durationMinutes: e.duration_minutes,
+        modality: e.modality || 'presencial', googleEventId: e.google_event_id || undefined,
+      }),
     });
     const out = await resp.json().catch(() => ({}));
     if (!resp.ok) return toast('No se pudo enviar la citación: ' + (out.error || resp.statusText));
-    toast('Citación enviada al correo del líder ✅');
+    // Si la integración con Google Calendar ya está configurada, guardamos
+    // el id del evento y el link de Meet para no crear un evento duplicado
+    // la próxima vez que se reenvíe esta misma citación, y para poder
+    // mostrar el enlace en el detalle de la cita.
+    if (!out.calendarSkipped && out.googleEventId) {
+      e.google_event_id = out.googleEventId; e.meet_link = out.meetLink || e.meet_link;
+      const { error: updErr } = await sb.from('schedule_events')
+        .update({ google_event_id: out.googleEventId, meet_link: out.meetLink || null }).eq('id', e.id);
+      if (updErr) console.error('No se pudo guardar el link de Google Calendar:', updErr.message);
+      renderCalendar(); renderFullCalendar();
+    }
+    if (out.calendarWarning) {
+      toast('Citación enviada al correo del líder ✅ (aviso: no se pudo crear en tu calendario de Google — ' + out.calendarWarning + ')');
+    } else {
+      toast('Citación enviada al correo del líder ✅' + (out.meetLink ? ' · Meet y calendario listos' : ''));
+    }
   } catch (err) {
     toast('No se pudo enviar la citación: ' + err.message);
   }
@@ -181,9 +215,15 @@ function showEventInfo(id) {
   const e = currentCalendarEvents().find(x => x.id === id);
   if (!e) return;
   const c = state.companies.find(x => x.id === e.company_id), s = c?.sites.find(x => x.id === e.site_id);
+  const isVirtual = e.modality === 'virtual';
   $('eventInfoBody').innerHTML = `
     <p><b>Actividad:</b> ${taskName(e.activity_id)}</p>
     <p><b>Empresa / Sede:</b> ${c?.name || ''} · ${s?.name || ''}</p>
+    <p><b>Modalidad:</b> ${isVirtual ? '🎥 Virtual' : '📍 Presencial'}</p>
+    ${isVirtual ? (e.meet_link
+        ? `<p><b>Google Meet:</b> <a href="${e.meet_link}" target="_blank" rel="noopener">${e.meet_link}</a></p>`
+        : `<p class="small">El link de Google Meet se genera al enviar/reenviar la citación.</p>`)
+      : ''}
     <p><b>Fecha y hora:</b> ${formatDate(e.event_date)} · ${e.event_time} (${e.duration_minutes} min)</p>
     <p><b>Líder / coordinador:</b> ${e.leader_name || 'Sin líder registrado'}${e.leader_email ? ' · ' + e.leader_email : ''}</p>
     ${e.notes ? `<p><b>Observación:</b> ${e.notes}</p>` : ''}
@@ -208,7 +248,7 @@ function renderCalendar() {
   $('calendarDayCount').textContent = `${events.length} ${events.length === 1 ? 'sesión' : 'sesiones'}${calendarShowAll ? ' · todas las empresas' : ''}`;
   $('calendarDayList').innerHTML = events.length ? events.map(e => {
     const c = state.companies.find(x => x.id === e.company_id), s = c?.sites.find(x => x.id === e.site_id);
-    return `<div class="dayEvent"><div class="time">${e.event_time} · ${e.duration_minutes} min</div><div class="title">${taskName(e.activity_id)}</div><div class="small">${c?.name || ''} · ${s?.name || ''}</div><div class="small">👤 ${e.leader_name || 'Sin líder registrado'}${e.leader_email ? ' · ' + e.leader_email : ''}</div><div class="small">🔔 Recordatorio: ${e.reminder_minutes >= 1440 ? '1 día antes' : e.reminder_minutes + ' min antes'}</div><div style="margin-top:10px;display:flex;gap:7px;flex-wrap:wrap"><button class="secondary" onclick='window.open(googleCalendarUrl(${JSON.stringify(e)}),"_blank")'>Google Calendar</button><button class="secondary" onclick="sendScheduleInvite('${e.id}')">📩 Enviar citación</button><button class="secondary" onclick="downloadICS('${e.id}')">🔔 .ics</button><button class="danger" data-requires-write onclick="deleteSchedule('${e.id}')">Eliminar</button></div></div>`;
+    return `<div class="dayEvent"><div class="time">${e.event_time} · ${e.duration_minutes} min</div><div class="title">${e.modality === 'virtual' ? '🎥' : '📍'} ${taskName(e.activity_id)}</div><div class="small">${c?.name || ''} · ${s?.name || ''}</div><div class="small">👤 ${e.leader_name || 'Sin líder registrado'}${e.leader_email ? ' · ' + e.leader_email : ''}</div><div class="small">🔔 Recordatorio: ${e.reminder_minutes >= 1440 ? '1 día antes' : e.reminder_minutes + ' min antes'}</div><div style="margin-top:10px;display:flex;gap:7px;flex-wrap:wrap">${e.modality === 'virtual' && e.meet_link ? `<button class="success" onclick="window.open('${e.meet_link}','_blank')">🎥 Unirse a Meet</button>` : ''}<button class="secondary" onclick='window.open(googleCalendarUrl(${JSON.stringify(e)}),"_blank")'>Google Calendar</button><button class="secondary" onclick="sendScheduleInvite('${e.id}')">📩 Enviar citación</button><button class="secondary" onclick="downloadICS('${e.id}')">🔔 .ics</button><button class="danger" data-requires-write onclick="deleteSchedule('${e.id}')">Eliminar</button></div></div>`;
   }).join('') : `<div class="calendarEmpty">No tienes sesiones programadas para este día${calendarShowAll ? ' (en ninguna empresa)' : ''}. Tu agenda está disponible. ✨</div>`;
   const all = source.filter(e => e.event_date === date);
   $('availabilityBox').innerHTML = `<div class="availabilityCard"><b>${formatDate(date)}</b><p class="small">${all.length ? 'Tienes ' + all.length + ' bloque(s) de tiempo ocupados en tu agenda interna.' : 'No tienes actividades programadas. Día disponible para nuevas sesiones.'}</p><div class="small"><b>Nota:</b> esta disponibilidad corresponde a las actividades registradas dentro de esta plataforma${calendarShowAll ? ', de todas las empresas' : ''}. Al usar "Google Calendar" puedes agregar la sesión a tu agenda personal.</div></div>`;
