@@ -14,7 +14,7 @@
   (celular, otra sesión abierta, etc.) se queda pegado en una versión vieja
   esperando que alguien limpie el caché a mano.
 -->
-<meta name="build-version" content="2026-09-24T17:55:00Z">
+<meta name="build-version" content="2026-09-24T18:16:56Z">
 <script>
 (function () {
   var CURRENT = document.querySelector('meta[name="build-version"]')?.content || '';
@@ -365,7 +365,8 @@
 <p class="small">Registra la disponibilidad informada por el líder y define la fecha final según la disponibilidad de tu agenda.</p>
 <div class="formgrid">
   <div><label>Empresa</label><select id="scCompany" onchange="scheduleCompanyChanged()"></select></div>
-  <div><label>Sede</label><select id="scSite"></select></div>
+  <div id="scSiteWrap"><label>Sede</label><select id="scSite"></select></div>
+  <div><label>Modalidad</label><select id="scModality" onchange="scheduleModalityChanged()"><option value="presencial">📍 Presencial</option><option value="virtual">🎥 Virtual (Google Meet)</option></select></div>
   <div class="full"><label>Actividad</label><select id="scTask"></select></div>
   <div><label>Nombre del líder</label><input id="scLeader" placeholder="Ej: Juan Pérez"></div>
   <div><label>Correo del líder</label><input id="scEmail" type="email" placeholder="correo@empresa.com"></div>
