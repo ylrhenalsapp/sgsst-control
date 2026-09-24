@@ -15,9 +15,32 @@
  * que solo tenga la URL.
  */
 
+const { escapeHtml, emailShell, detailRow, detailsTable, calloutBox, BRAND } = require('../lib/emailTemplate');
+
 const SUPABASE_URL = 'https://jxzoaswibkkqggiijwrr.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4em9hc3dpYmtrcWdnaWlqd3JyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MjcyMTIsImV4cCI6MjEwMzUwMzIxMn0.MgURAe8IWGMRanZbZGe-HlBxg76jYNTvnWlAUNrIQQU';
 const FROM = 'SG-SST Control <notificaciones@yasbleidislopez.com>';
+const REPLY_TO = 'contacto@yasbleidislopez.com';
+
+function scheduleInviteBodyHtml(d) {
+  const rows = [
+    detailRow('🧾', 'Actividad', d.activityName),
+    detailRow('🏢', 'Empresa', d.companyName),
+    detailRow('📍', 'Sede', d.siteName),
+    detailRow('🗓️', 'Fecha', d.dateFormatted),
+    detailRow('🕒', 'Hora', d.time),
+    detailRow('⏱️', 'Duración', `${d.durationMinutes} minutos`),
+  ];
+  return `
+    <p style="margin:0 0 14px;">Buenas tardes, señor(a) <b>${escapeHtml(d.leaderName)}</b>,</p>
+    <p style="margin:0 0 20px;">De acuerdo con la conversación establecida y la disponibilidad informada, le confirmo que tendremos la sesión correspondiente a la siguiente actividad:</p>
+    ${detailsTable(rows)}
+    ${d.notes ? `<p style="margin:0 0 20px;"><b>Observación:</b> ${escapeHtml(d.notes)}</p>` : ''}
+    ${calloutBox('📎 Este correo incluye un archivo de invitación adjunto: ábrelo para agregar la sesión directamente a tu calendario y confirmar tu asistencia.')}
+    <p style="margin:0 0 4px;">Agradezco tener en cuenta esta programación para el desarrollo de la actividad.</p>
+    <p style="margin:22px 0 0;">Cordialmente,<br><b>Yasbleidis López Rhenals</b><br><span style="color:${BRAND.muted};font-size:13px;">Fisioterapeuta · Especialista en Gerencia de la Seguridad y Salud en el Trabajo</span></p>
+  `;
+}
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
@@ -49,7 +72,7 @@ module.exports = async (req, res) => {
     }
 
     // 2. Validar los datos recibidos desde el navegador.
-    const { to, subject, text, ics, filename } = req.body || {};
+    const { to, subject, text, ics, filename, details } = req.body || {};
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!to || !emailRe.test(to)) {
       res.status(400).json({ error: 'Correo del destinatario inválido.' });
@@ -60,7 +83,19 @@ module.exports = async (req, res) => {
       return;
     }
 
-    // 3. Enviar vía Resend. El .ics va como adjunto con
+    // 3. Armar la versión bonita (HTML con logo y colores de marca) además
+    // del texto plano de siempre, que queda como respaldo para clientes de
+    // correo que no rendericen HTML.
+    const html = details
+      ? emailShell({
+          badge: '📅 Confirmación de sesión',
+          title: subject,
+          bandColor: BRAND.green,
+          bodyHtml: scheduleInviteBodyHtml(details),
+        })
+      : undefined;
+
+    // 4. Enviar vía Resend. El .ics va como adjunto con
     // content_type "method=REQUEST" (además de traer METHOD:REQUEST dentro
     // del propio archivo) para que Outlook/Gmail del líder la reconozcan
     // como una citación real, con opción de Aceptar/Rechazar.
@@ -73,8 +108,10 @@ module.exports = async (req, res) => {
       body: JSON.stringify({
         from: FROM,
         to: [to],
+        reply_to: REPLY_TO,
         subject,
         text,
+        ...(html ? { html } : {}),
         attachments: [
           {
             filename: filename || 'citacion.ics',
