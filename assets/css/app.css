@@ -516,3 +516,7 @@ select{accent-color:var(--navy);cursor:pointer}
 @media (max-width:640px){.monthProgressWrap{gap:14px}.radialLabel{min-width:0}}
 /* V16: botón "Ver todas las citas" del calendario — estado activo. */
 .calToggleActive{background:var(--navy);color:#fff}
+/* V17: caja de advertencia del modal de eliminar empresa. */
+.warningBox{background:#fff5f4;border:1px solid #f3c9c4;border-radius:10px;padding:14px 16px;color:#7a2e26}
+.warningBox ul{margin:10px 0 0 18px;padding:0}
+.warningBox li{margin-bottom:3px}
