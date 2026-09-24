@@ -1204,6 +1204,8 @@ async function renderConfig() {
       <div><label>Email</label><input id="advEmail" value="${adv.email || ''}"></div>
       <div><label>Banco</label><input id="advBanco" value="${adv.banco || ''}"></div>
       <div><label>Cuenta bancaria</label><input id="advCuenta" value="${adv.cuenta_bancaria || ''}"></div>
+      <div><label>Nequi</label><input id="advNequi" placeholder="Número celular Nequi" value="${adv.nequi || ''}"></div>
+      <div><label>Llave Bre-B (Bancolombia)</label><input id="advLlaveBreB" placeholder="Celular, cédula, correo o alias" value="${adv.llave_bre_b || ''}"></div>
       <div><label>Régimen de IVA</label><input id="advRegimen" value="${adv.regimen_iva || 'IVA Régimen Simplificado'}"></div>
       <div class="full"><label>Actividad económica</label><input id="advActividad" value="${adv.actividad_economica || ''}"></div>
     </div>
@@ -1766,11 +1768,13 @@ async function saveAdvisorProfile() {
     email: $('advEmail').value.trim() || null,
     banco: $('advBanco').value.trim() || null,
     cuenta_bancaria: $('advCuenta').value.trim() || null,
+    nequi: $('advNequi').value.trim() || null,
+    llave_bre_b: $('advLlaveBreB').value.trim() || null,
     regimen_iva: $('advRegimen').value.trim() || null,
     actividad_economica: $('advActividad').value.trim() || null,
   };
   const { error } = await sb.from('advisor_profile').upsert(payload);
-  if (error) return toast('No se pudo guardar: ' + error.message + (error.message?.includes('advisor_profile') ? ' (falta correr la migración 0012 en Supabase).' : ''));
+  if (error) return toast('No se pudo guardar: ' + error.message + (error.message?.includes('advisor_profile') || error.message?.includes('nequi') || error.message?.includes('llave_bre_b') ? ' (falta correr la migración 0015 en Supabase).' : ''));
   state.advisorProfile = payload;
   toast('Tus datos quedaron guardados.');
 }

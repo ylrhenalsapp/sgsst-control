@@ -437,6 +437,8 @@ async function renderInvoiceReport() {
           <span class="lbl">Tel. / Celular:</span><span class="val">${[adv.telefono, adv.celular].filter(Boolean).join(' / ') || '—'}</span>
           <span class="lbl">Email:</span><span class="val">${adv.email || '—'}</span>
           <span class="lbl">Cuenta:</span><span class="val">${adv.cuenta_bancaria ? adv.cuenta_bancaria + (adv.banco ? ' · ' + adv.banco : '') : '—'}</span>
+          <span class="lbl">Nequi:</span><span class="val">${adv.nequi || '—'}</span>
+          <span class="lbl">Llave Bre-B:</span><span class="val">${adv.llave_bre_b || '—'}</span>
           <span class="lbl">Régimen:</span><span class="val">${adv.regimen_iva || 'IVA Régimen Simplificado'}</span>
         </div>
       </div>
