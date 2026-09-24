@@ -399,69 +399,90 @@ async function renderInvoiceReport() {
     const grandTotal = actTotal + expTotal;
     const adv = state.advisorProfile || {};
 
+    // Solo se muestran los campos que realmente tienen dato cargado — un
+    // documento formal no debe mostrar guiones ni inventar información que
+    // todavía no se ha registrado en Configuración.
+    const infoRow = (label, value) => value ? `<span class="lbl">${label}:</span><span class="val">${value}</span>` : '';
+    const prestadorRows = [
+      ['Nombre', 'Yasbleidis López Rhenals'],
+      ['Cédula', adv.cedula],
+      ['Profesión', adv.profesion],
+      ['Registro profesional', adv.registro_profesional],
+      ['Licencia SST', adv.licencia_sst],
+      ['Dirección', adv.direccion],
+      ['Ciudad', [adv.ciudad, adv.departamento].filter(Boolean).join(' · ')],
+      ['Teléfono / Celular', [adv.telefono, adv.celular].filter(Boolean).join(' / ')],
+      ['Email', adv.email],
+      ['Información tributaria', adv.regimen_iva],
+      ['Actividad económica', adv.actividad_economica],
+    ].map(([l, v]) => infoRow(l, v)).filter(Boolean).join('');
+
+    const clienteRows = [
+      ['Razón social', providerName],
+      ['NIT', provider.nit],
+      ['Contacto', provider.gerente],
+      ['Dirección', provider.direccion],
+      ['Ciudad', provider.ciudad],
+      ['Teléfono', provider.telefono],
+      ['Radicación', provider.email_radicacion],
+    ].map(([l, v]) => infoRow(l, v)).filter(Boolean).join('');
+
+    const pagoRows = [
+      ['Banco', adv.banco],
+      ['Número de cuenta', adv.cuenta_bancaria],
+      ['Nequi', adv.nequi],
+      ['Llave Bre-B (Bancolombia)', adv.llave_bre_b],
+    ].map(([l, v]) => infoRow(l, v)).filter(Boolean).join('');
+
     if (box) box.innerHTML = `
-    <div class="reportTopBar">
-      <div class="reportBrand">
-        <img src="${REPORT_LOGO_B64}" alt="SST Asesorías y Consultorías">
-        <div class="reportBrandText"><h2>CUENTA DE COBRO</h2><p>Relación de actividades mensuales ejecutadas para ${providerName}.</p></div>
+    <div class="invoiceHeader">
+      <img src="${REPORT_LOGO_B64}" alt="SST Asesorías y Consultorías" class="invoiceLogo">
+      <div class="invoiceHeaderMeta">
+        <span class="invoiceNumber">No. [PENDIENTE]</span>
+        <span class="invoiceMetaLine">Periodo: ${monthLabel(m)}</span>
+        <span class="invoiceMetaLine">Fecha de generación: ${genDate}</span>
       </div>
-      <div class="reportInfoBox">
-        <span class="lbl">Proveedor:</span><span class="val">${providerName}</span>
-        <span class="lbl">Periodo:</span><span class="val">${monthLabel(m)}</span>
-        <span class="lbl">Generado el:</span><span class="val">${genDate}</span>
+    </div>
+    <h1 class="invoiceTitle">Cuenta de cobro</h1>
+
+    <div class="reportGrid2" style="margin-bottom:8px">
+      <div>
+        <div class="reportSectionTitle" style="margin-top:0">Datos del prestador</div>
+        <div class="reportInfoBox" style="grid-template-columns:auto 1fr">${prestadorRows}</div>
+      </div>
+      <div>
+        <div class="reportSectionTitle" style="margin-top:0">Datos del cliente</div>
+        <div class="reportInfoBox" style="grid-template-columns:auto 1fr">${clienteRows}</div>
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:8px">
-      <div style="border:1px solid var(--line);border-radius:12px;padding:14px">
-        <div class="reportSectionTitle" style="margin:0 0 8px">🏢 Proveedor</div>
-        <div class="reportInfoBox" style="grid-template-columns:auto 1fr">
-          <span class="lbl">Empresa:</span><span class="val">${providerName}</span>
-          <span class="lbl">NIT:</span><span class="val">${provider.nit || '—'}</span>
-          <span class="lbl">Gerente:</span><span class="val">${provider.gerente || '—'}</span>
-          <span class="lbl">Dirección:</span><span class="val">${provider.direccion || '—'}</span>
-          <span class="lbl">Ciudad:</span><span class="val">${provider.ciudad || '—'}</span>
-          <span class="lbl">Teléfono:</span><span class="val">${provider.telefono || '—'}</span>
-          <span class="lbl">Radicación:</span><span class="val">${provider.email_radicacion || '—'}</span>
-        </div>
-      </div>
-      <div style="border:1px solid var(--line);border-radius:12px;padding:14px">
-        <div class="reportSectionTitle" style="margin:0 0 8px">🧾 Datos personales</div>
-        <div class="reportInfoBox" style="grid-template-columns:auto 1fr">
-          <span class="lbl">Nombre:</span><span class="val">Yasbleidis López Rhenals</span>
-          <span class="lbl">Cédula:</span><span class="val">${adv.cedula || '—'}</span>
-          <span class="lbl">Profesión:</span><span class="val">${adv.profesion || '—'}</span>
-          <span class="lbl">Reg. profesional:</span><span class="val">${adv.registro_profesional || '—'}</span>
-          <span class="lbl">Dirección:</span><span class="val">${adv.direccion || '—'}</span>
-          <span class="lbl">Ciudad:</span><span class="val">${adv.ciudad || '—'}${adv.departamento ? ' · ' + adv.departamento : ''}</span>
-          <span class="lbl">Tel. / Celular:</span><span class="val">${[adv.telefono, adv.celular].filter(Boolean).join(' / ') || '—'}</span>
-          <span class="lbl">Email:</span><span class="val">${adv.email || '—'}</span>
-          <span class="lbl">Cuenta:</span><span class="val">${adv.cuenta_bancaria ? adv.cuenta_bancaria + (adv.banco ? ' · ' + adv.banco : '') : '—'}</span>
-          <span class="lbl">Nequi:</span><span class="val">${adv.nequi || '—'}</span>
-          <span class="lbl">Llave Bre-B:</span><span class="val">${adv.llave_bre_b || '—'}</span>
-          <span class="lbl">Régimen:</span><span class="val">${adv.regimen_iva || 'IVA Régimen Simplificado'}</span>
-        </div>
-      </div>
-    </div>
+    <div class="reportSectionTitle">Concepto del servicio</div>
+    <p class="invoiceConcept">Relación de actividades mensuales de Seguridad y Salud en el Trabajo (SG-SST) ejecutadas para ${providerName}, correspondientes al periodo ${monthLabel(m)}.</p>
 
-    <div class="reportSectionTitle">📋 1. Actividades realizadas</div>
-    <div class="tablewrap"><table><thead><tr><th>No.</th><th>Fecha</th><th>Empresa</th><th>Descripción</th><th>Horas</th><th>Vlr. unitario</th><th>Vlr. total</th></tr></thead><tbody>
+    <div class="reportSectionTitle" style="margin-top:22px">Detalle — Actividades realizadas</div>
+    <div class="tablewrap"><table><thead><tr><th>No.</th><th>Fecha</th><th>Empresa</th><th>Descripción</th><th>Cantidad</th><th>Valor unitario</th><th>Valor total</th></tr></thead><tbody>
       ${actRows.length ? actRows.map((x, i) => `<tr><td>${i + 1}</td><td>${x.record_date}</td><td>${companyName(x.company_id)}</td><td>${taskName(x.activity_id)}${x.notes ? ' · ' + x.notes : ''}</td><td>${x.hours} h</td><td>${money(x.rate)}</td><td>${money(x.hours * x.rate)}</td></tr>`).join('') : '<tr><td colspan="7" class="empty">Sin actividades registradas en este periodo.</td></tr>'}
       <tr style="font-weight:800;background:#f4f7fa"><td colspan="6">Subtotal actividades</td><td>${money(actTotal)}</td></tr>
     </tbody></table></div>
 
-    <div class="reportSectionTitle" style="margin-top:22px">🚗 2. Desplazamiento y gastos de representación</div>
-    <div class="tablewrap"><table><thead><tr><th>No.</th><th>Fecha</th><th>Empresa</th><th>Concepto</th><th>Valor</th></tr></thead><tbody>
-      ${expRows.length ? expRows.map((x, i) => `<tr><td>${i + 1}</td><td>${x.record_date}</td><td>${companyName(x.company_id)}</td><td>${x.concept}</td><td>${money(x.amount)}</td></tr>`).join('') : '<tr><td colspan="5" class="empty">Sin gastos registrados en este periodo.</td></tr>'}
+    ${expRows.length ? `
+    <div class="reportSectionTitle" style="margin-top:22px">Detalle — Desplazamiento y gastos de representación</div>
+    <div class="tablewrap"><table><thead><tr><th>No.</th><th>Fecha</th><th>Empresa</th><th>Descripción</th><th>Valor total</th></tr></thead><tbody>
+      ${expRows.map((x, i) => `<tr><td>${i + 1}</td><td>${x.record_date}</td><td>${companyName(x.company_id)}</td><td>${x.concept}</td><td>${money(x.amount)}</td></tr>`).join('')}
       <tr style="font-weight:800;background:#f4f7fa"><td colspan="4">Subtotal desplazamiento</td><td>${money(expTotal)}</td></tr>
-    </tbody></table></div>
+    </tbody></table></div>` : ''}
 
-    <div class="tablewrap" style="margin-top:16px"><table><tbody>
-      <tr style="font-weight:800;background:#f4f7fa"><td>TOTAL A COBRAR</td><td style="text-align:right">${money(grandTotal)}</td></tr>
-    </tbody></table></div>
+    <div class="invoiceTotalBand">
+      <span>Total a pagar</span>
+      <span class="invoiceTotalValue">${money(grandTotal)}</span>
+    </div>
     <p class="small" style="margin-top:10px"><b>Valor en letras:</b> ${numeroALetras(grandTotal)}</p>
 
-    <div class="reportSectionTitle" style="margin-top:22px">📜 Declaración</div>
+    ${pagoRows ? `
+    <div class="reportSectionTitle" style="margin-top:26px">Forma de pago</div>
+    <div class="reportInfoBox" style="grid-template-columns:auto 1fr">${pagoRows}</div>` : ''}
+
+    <div class="reportSectionTitle" style="margin-top:26px">Observaciones</div>
     <p class="small" style="line-height:1.7">
       1. Soy persona natural y cumplo con todos los requisitos para pertenecer al ${adv.regimen_iva || 'Régimen Simplificado'} y me encuentro debidamente inscrito(a) en el RUT.<br>
       2. Me encuentro dentro de las situaciones contempladas en el artículo 499 del Estatuto Tributario.<br>
@@ -469,17 +490,25 @@ async function renderInvoiceReport() {
       4. Declaro que la información aquí consignada es correcta y se ajusta a las disposiciones legales.
     </p>
 
-    <div class="reportGrid2" style="margin-top:24px">
+    <div class="reportGrid2" style="margin-top:30px">
       <div>
-        <div class="reportSectionTitle" style="margin:0 0 8px">✍️ Firma</div>
-        <div class="reportSignatureBlock"><img src="${REPORT_SIGNATURE_B64}" alt="Yasbleidis López Rhenals · SST Asesorías y Consultorías"></div>
-        <p class="small" style="text-align:center;margin-top:4px">C.C. ${adv.cedula || '________________'}</p>
+        <div class="reportSectionTitle" style="margin:0 0 8px">Firma</div>
+        <div class="reportSignatureBlock"><img src="${REPORT_SIGNATURE_B64}" alt="Yasbleidis López Rhenals"></div>
+        <p class="invoiceSignerName">Yasbleidis López Rhenals</p>
+        <p class="small" style="text-align:center">${[adv.profesion, adv.registro_profesional ? 'Reg. ' + adv.registro_profesional : ''].filter(Boolean).join(' · ') || 'Prestadora del servicio'}</p>
+        <p class="small" style="text-align:center">C.C. ${adv.cedula || '________________'}</p>
       </div>
       <div>
-        <div class="reportSectionTitle" style="margin:0 0 8px">📥 Recibido por</div>
-        <p class="small" style="margin:40px 0 4px;border-top:1px solid var(--line);padding-top:6px">${provider.gerente || '_______________________________'}</p>
+        <div class="reportSectionTitle" style="margin:0 0 8px">Recibido por</div>
+        <p class="small" style="margin:44px 0 4px;border-top:1px solid var(--line);padding-top:6px">${provider.gerente || '_______________________________'}</p>
+        <p class="small">${providerName}</p>
         <p class="small">Fecha: ____ / ____ / ______</p>
       </div>
+    </div>
+
+    <div class="invoiceFooter">
+      <span>SST Asesorías y Consultorías</span>
+      <span>${[adv.email, adv.telefono || adv.celular].filter(Boolean).join(' · ')}</span>
     </div>
     `;
     toast('Cuenta de cobro generada');
@@ -669,7 +698,9 @@ async function exportReportWord() {
   if (!el) return;
   const styles = `
     body{font-family:Calibri,Arial,sans-serif;color:#1f2937;font-size:11pt}
-    h2{color:#18324a;font-size:16pt}
+    h1,h2{color:#18324a}
+    h1{font-size:18pt;text-align:center}
+    h2{font-size:16pt}
     table{border-collapse:collapse;width:100%;margin:10px 0}
     th,td{border:1px solid #d8e0e8;padding:6px 8px;font-size:10pt;text-align:left;vertical-align:top}
     th{background:#edf4f8}
@@ -682,6 +713,17 @@ async function exportReportWord() {
     .small{font-size:9.5pt;color:#6b7280}
     .reportKpiCard,.reportMiniCard,.reportStatCard{border:1px solid #d8e0e8;padding:10px;margin-bottom:10px}
     .reportSectionTitle{color:#18324a;font-weight:bold;font-size:12pt;margin:16px 0 8px}
+    .reportInfoBox .lbl{color:#6b7280;font-weight:bold}
+    .reportInfoBox .val{color:#1f2937;font-weight:bold}
+    .invoiceHeader{border-bottom:3px solid #18324a;padding-bottom:10px;margin-bottom:14px}
+    .invoiceNumber{font-size:11pt;color:#18324a;font-weight:bold}
+    .invoiceMetaLine{font-size:9pt;color:#6b7280}
+    .invoiceTitle{font-size:18pt;color:#18324a;font-weight:bold;text-align:center}
+    .invoiceConcept{background:#f5f7fa;border-left:3px solid #18324a;padding:10px 14px;font-size:10.5pt}
+    .invoiceTotalBand{background:#18324a;color:#ffffff;padding:12px 16px;font-weight:bold;font-size:13pt}
+    .invoiceTotalValue{font-size:14pt}
+    .invoiceSignerName{text-align:center;font-weight:bold;color:#18324a;font-size:11pt}
+    .invoiceFooter{margin-top:20px;padding-top:8px;border-top:1px solid #d8e0e8;font-size:8.5pt;color:#6b7280}
     img{max-width:460px}
   `;
   const html = `<!DOCTYPE html><html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>

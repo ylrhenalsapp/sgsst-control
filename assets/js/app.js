@@ -1189,28 +1189,75 @@ async function renderConfig() {
 
   // Mis datos: fijos de Yasbleidis, usados en cualquier Cuenta de cobro sin
   // importar el proveedor (Configuración → Mis datos).
-  {
-    const adv = state.advisorProfile || {};
-    $('cfg-mydata').innerHTML = `<div class="panelhead"><h2>Mis datos</h2></div><p class="small">Estos datos se usan para llenar automáticamente el encabezado de cada Cuenta de cobro que generes desde Informes. Se guardan una sola vez.</p>
-    <div class="formgrid">
-      <div><label>Cédula</label><input id="advCedula" value="${adv.cedula || ''}"></div>
-      <div><label>Profesión</label><input id="advProfesion" value="${adv.profesion || ''}"></div>
-      <div><label>Registro profesional</label><input id="advRegistro" value="${adv.registro_profesional || ''}"></div>
-      <div><label>Dirección</label><input id="advDireccion" value="${adv.direccion || ''}"></div>
-      <div><label>Ciudad</label><input id="advCiudad" value="${adv.ciudad || ''}"></div>
-      <div><label>Departamento</label><input id="advDepartamento" value="${adv.departamento || ''}"></div>
-      <div><label>Teléfono</label><input id="advTelefono" value="${adv.telefono || ''}"></div>
-      <div><label>Celular</label><input id="advCelular" value="${adv.celular || ''}"></div>
-      <div><label>Email</label><input id="advEmail" value="${adv.email || ''}"></div>
-      <div><label>Banco</label><input id="advBanco" value="${adv.banco || ''}"></div>
-      <div><label>Cuenta bancaria</label><input id="advCuenta" value="${adv.cuenta_bancaria || ''}"></div>
-      <div><label>Nequi</label><input id="advNequi" placeholder="Número celular Nequi" value="${adv.nequi || ''}"></div>
-      <div><label>Llave Bre-B (Bancolombia)</label><input id="advLlaveBreB" placeholder="Celular, cédula, correo o alias" value="${adv.llave_bre_b || ''}"></div>
-      <div><label>Régimen de IVA</label><input id="advRegimen" value="${adv.regimen_iva || 'IVA Régimen Simplificado'}"></div>
-      <div class="full"><label>Actividad económica</label><input id="advActividad" value="${adv.actividad_economica || ''}"></div>
-    </div>
-    <button class="primary" data-requires-write onclick="saveAdvisorProfile()" style="margin-top:14px">Guardar mis datos</button>`;
+  renderMyDataPanel();
+}
+
+// ---------------------------------------------------------------------------
+// Mis datos (Configuración → Mis datos): es la titular, una sola persona —
+// por eso NO es un formulario de "agregar" siempre visible. Por defecto se
+// muestran sus datos ya cargados en modo lectura, y un botón "Editar" abre
+// el mismo formulario de siempre (con Guardar/Cancelar) para corregirlos.
+// ---------------------------------------------------------------------------
+let advisorEditMode = false;
+
+function toggleAdvisorEdit(mode) {
+  advisorEditMode = mode;
+  renderMyDataPanel();
+}
+
+function renderMyDataPanel() {
+  if (!$('cfg-mydata')) return;
+  const adv = state.advisorProfile || {};
+
+  if (!advisorEditMode) {
+    const row = (label, value) => value ? `<span class="lbl">${label}:</span><span class="val">${value}</span>` : '';
+    const rows = [
+      ['Cédula', adv.cedula],
+      ['Profesión', adv.profesion],
+      ['Registro profesional', adv.registro_profesional],
+      ['Licencia SST', adv.licencia_sst],
+      ['Dirección', adv.direccion],
+      ['Ciudad', [adv.ciudad, adv.departamento].filter(Boolean).join(' · ')],
+      ['Teléfono', adv.telefono],
+      ['Celular', adv.celular],
+      ['Email', adv.email],
+      ['Banco', adv.banco],
+      ['Cuenta bancaria', adv.cuenta_bancaria],
+      ['Nequi', adv.nequi],
+      ['Llave Bre-B', adv.llave_bre_b],
+      ['Información tributaria', adv.regimen_iva],
+      ['Actividad económica', adv.actividad_economica],
+    ].map(([l, v]) => row(l, v)).filter(Boolean).join('');
+
+    $('cfg-mydata').innerHTML = `<div class="panelhead"><h2>Mis datos</h2><button class="secondary" data-requires-write onclick="toggleAdvisorEdit(true)">✏️ Editar</button></div>
+    <p class="small">Datos de Yasbleidis López Rhenals, titular, usados para llenar automáticamente el encabezado de cada Cuenta de cobro.</p>
+    ${rows ? `<div class="reportInfoBox" style="grid-template-columns:auto 1fr;margin-top:10px">${rows}</div>` : '<p class="empty">Todavía no hay datos cargados. Da clic en "Editar" para completarlos.</p>'}`;
+    return;
   }
+
+  $('cfg-mydata').innerHTML = `<div class="panelhead"><h2>Mis datos</h2></div><p class="small">Estos datos se usan para llenar automáticamente el encabezado de cada Cuenta de cobro que generes desde Informes.</p>
+  <div class="formgrid">
+    <div><label>Cédula</label><input id="advCedula" value="${adv.cedula || ''}"></div>
+    <div><label>Profesión</label><input id="advProfesion" value="${adv.profesion || ''}"></div>
+    <div><label>Registro profesional</label><input id="advRegistro" value="${adv.registro_profesional || ''}"></div>
+    <div><label>Licencia SST</label><input id="advLicenciaSst" value="${adv.licencia_sst || ''}"></div>
+    <div><label>Dirección</label><input id="advDireccion" value="${adv.direccion || ''}"></div>
+    <div><label>Ciudad</label><input id="advCiudad" value="${adv.ciudad || ''}"></div>
+    <div><label>Departamento</label><input id="advDepartamento" value="${adv.departamento || ''}"></div>
+    <div><label>Teléfono</label><input id="advTelefono" value="${adv.telefono || ''}"></div>
+    <div><label>Celular</label><input id="advCelular" value="${adv.celular || ''}"></div>
+    <div><label>Email</label><input id="advEmail" value="${adv.email || ''}"></div>
+    <div><label>Banco</label><input id="advBanco" value="${adv.banco || ''}"></div>
+    <div><label>Cuenta bancaria</label><input id="advCuenta" value="${adv.cuenta_bancaria || ''}"></div>
+    <div><label>Nequi</label><input id="advNequi" placeholder="Número celular Nequi" value="${adv.nequi || ''}"></div>
+    <div><label>Llave Bre-B (Bancolombia)</label><input id="advLlaveBreB" placeholder="Celular, cédula, correo o alias" value="${adv.llave_bre_b || ''}"></div>
+    <div><label>Régimen de IVA</label><input id="advRegimen" value="${adv.regimen_iva || 'IVA Régimen Simplificado'}"></div>
+    <div class="full"><label>Actividad económica</label><input id="advActividad" value="${adv.actividad_economica || ''}"></div>
+  </div>
+  <div class="actions" style="justify-content:flex-start">
+    <button class="secondary" onclick="toggleAdvisorEdit(false)">Cancelar</button>
+    <button class="primary" data-requires-write onclick="saveAdvisorProfile()">Guardar cambios</button>
+  </div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1760,6 +1807,7 @@ async function saveAdvisorProfile() {
     cedula: $('advCedula').value.trim() || null,
     profesion: $('advProfesion').value.trim() || null,
     registro_profesional: $('advRegistro').value.trim() || null,
+    licencia_sst: $('advLicenciaSst').value.trim() || null,
     direccion: $('advDireccion').value.trim() || null,
     ciudad: $('advCiudad').value.trim() || null,
     departamento: $('advDepartamento').value.trim() || null,
@@ -1774,8 +1822,10 @@ async function saveAdvisorProfile() {
     actividad_economica: $('advActividad').value.trim() || null,
   };
   const { error } = await sb.from('advisor_profile').upsert(payload);
-  if (error) return toast('No se pudo guardar: ' + error.message + (error.message?.includes('advisor_profile') || error.message?.includes('nequi') || error.message?.includes('llave_bre_b') ? ' (falta correr la migración 0015 en Supabase).' : ''));
+  if (error) return toast('No se pudo guardar: ' + error.message + (error.message?.includes('advisor_profile') || error.message?.includes('nequi') || error.message?.includes('llave_bre_b') || error.message?.includes('licencia_sst') ? ' (falta correr la migración 0016 en Supabase).' : ''));
   state.advisorProfile = payload;
+  advisorEditMode = false;
+  renderMyDataPanel();
   toast('Tus datos quedaron guardados.');
 }
 
