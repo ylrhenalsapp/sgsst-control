@@ -17,6 +17,13 @@ function monthLabel(m) {
   return d.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
 }
 
+// Iniciales automáticas de un nombre (proveedor/empresa) para el número de
+// la Cuenta de cobro — ej: "Aguas de la Sabana S.A. E.S.P." → "AGUA".
+function invoiceInitials(name, len = 4) {
+  const clean = (name || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z]/g, '').toUpperCase();
+  return clean.slice(0, len) || 'GEN';
+}
+
 function generateReport() {
   const scopeSel = $('reportScope')?.value || 'monthly';
   // El selector de proveedor se usa tanto para el "Informe por proveedor"
@@ -434,11 +441,31 @@ async function renderInvoiceReport() {
       ['Llave Bre-B (Bancolombia)', adv.llave_bre_b],
     ].map(([l, v]) => infoRow(l, v)).filter(Boolean).join('');
 
+    // Número de la cuenta de cobro: PROVEEDOR-EMPRESA-FECHA-CONSECUTIVO.
+    // El consecutivo es global y solo se asigna una vez por proveedor+mes
+    // (migración 0017) — reabrir/reexportar la misma cuenta de cobro
+    // conserva el mismo número. Si la migración todavía no se corrió, se
+    // deja "[PENDIENTE]" en vez de inventar un número.
+    const billedCompanyNames = Array.from(new Set([...actRows, ...expRows].map(x => companyName(x.company_id)).filter(Boolean)));
+    const empresaCode = billedCompanyNames.length === 0 ? 'GEN'
+      : billedCompanyNames.length === 1 ? invoiceInitials(billedCompanyNames[0])
+      : billedCompanyNames.length === 2 ? billedCompanyNames.map(n => invoiceInitials(n, 3)).join('+')
+      : 'VARIAS';
+    const invoiceDateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const invoiceCodePrefix = `${invoiceInitials(providerName)}-${empresaCode}-${invoiceDateStr}`;
+    let invoiceNumber = null;
+    try {
+      const { data: numData, error: numErr } = await sb.rpc('get_or_create_invoice_number', {
+        p_provider_id: providerId, p_period: m, p_code_prefix: invoiceCodePrefix,
+      });
+      if (!numErr && numData) invoiceNumber = numData;
+    } catch (e) { invoiceNumber = null; }
+
     if (box) box.innerHTML = `
     <div class="invoiceHeader">
       <img src="${REPORT_LOGO_B64}" alt="SST Asesorías y Consultorías" class="invoiceLogo">
       <div class="invoiceHeaderMeta">
-        <span class="invoiceNumber">No. [PENDIENTE]</span>
+        <span class="invoiceNumber">No. ${invoiceNumber || '[PENDIENTE]'}</span>
         <span class="invoiceMetaLine">Periodo: ${monthLabel(m)}</span>
         <span class="invoiceMetaLine">Fecha de generación: ${genDate}</span>
       </div>
@@ -512,7 +539,7 @@ async function renderInvoiceReport() {
     </div>
     `;
     toast('Cuenta de cobro generada');
-    lastReport = { scope: 'invoice', providerId, providerName, m, actRows, expRows, actTotal, expTotal, grandTotal, genDate, title: `Cuenta de cobro · ${providerName}` };
+    lastReport = { scope: 'invoice', providerId, providerName, m, actRows, expRows, actTotal, expTotal, grandTotal, genDate, invoiceNumber, title: `Cuenta de cobro · ${providerName}` };
     return lastReport;
   } catch (err) {
     console.error('Error generando la cuenta de cobro:', err);
