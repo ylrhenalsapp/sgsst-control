@@ -848,7 +848,7 @@ async function saveExpense() {
   const { error } = editingExpenseId
     ? await sb.from('expenses').update(payload).eq('id', editingExpenseId)
     : await sb.from('expenses').insert(payload);
-  if (error) return toast('No se pudo guardar el gasto: ' + error.message + (error.message?.includes('expenses') ? ' (falta correr la migración 0012 en Supabase).' : ''));
+  if (error) return toast('No se pudo guardar el gasto: ' + error.message + (error.message?.includes('expenses') || error.message?.includes('amount') ? ' (falta correr la migración 0013 en Supabase, o falta recargar el schema cache si ya la corriste).' : ''));
   closeModal('expenseModal'); editingExpenseId = null;
   await refreshAll();
   toast('Gasto guardado.');
