@@ -1211,7 +1211,79 @@ async function renderConfig() {
   }
 }
 
-async function removeCompany(id) { if (state.companies.length <= 1) return toast('Debe existir al menos una empresa'); if (confirm('¿Eliminar empresa y sus sedes?')) { const { error } = await sb.from('companies').delete().eq('id', id); if (error) return toast(error.message); await init(); } }
+// ---------------------------------------------------------------------------
+// Eliminar empresa: antes de confirmar, se muestran las cantidades reales de
+// todo lo que se va a borrar (sedes, horas, evidencias, agenda, gastos), y se
+// exige escribir el nombre exacto de la empresa para habilitar el botón — así
+// se evita un borrado accidental de algo que no se puede deshacer.
+// ---------------------------------------------------------------------------
+let deleteCompanyTarget = null;
+
+function removeCompany(id) {
+  if (state.companies.length <= 1) return toast('Debe existir al menos una empresa');
+  const c = state.companies.find(x => x.id === id);
+  if (!c) return;
+  openDeleteCompanyModal(c);
+}
+
+async function openDeleteCompanyModal(c) {
+  deleteCompanyTarget = c;
+  $('delCompanyName').textContent = c.name;
+  $('delCompanyConfirmInput').value = '';
+  $('delCompanyConfirmBtn').disabled = true;
+  $('delCompanySummary').innerHTML = `<div class="warningBox"><p>Calculando lo que se eliminaría de "${c.name}"…</p></div>`;
+  openModal('deleteCompanyModal');
+
+  const countOf = async (table) => {
+    try {
+      const { count } = await sb.from(table).select('id', { count: 'exact', head: true }).eq('company_id', c.id);
+      return count || 0;
+    } catch (e) { return 0; }
+  };
+  const [hrCount, evCount, schCount, expCount] = await Promise.all([
+    countOf('hour_records'), countOf('evidences'), countOf('schedule_events'), countOf('expenses'),
+  ]);
+
+  // Si el usuario ya cerró el modal o eligió otra empresa mientras se
+  // calculaban los conteos, no se pisa el contenido que esté mostrando ahora.
+  if (deleteCompanyTarget?.id !== c.id) return;
+
+  $('delCompanySummary').innerHTML = `
+    <div class="warningBox">
+      <p>Esto eliminará <b>de forma permanente e irreversible</b> la empresa <b>"${c.name}"</b> y todo lo que depende de ella:</p>
+      <ul>
+        <li>${c.sites.length} sede(s)</li>
+        <li>${hrCount} registro(s) de horas</li>
+        <li>${evCount} evidencia(s)</li>
+        <li>${schCount} evento(s) de agenda</li>
+        <li>${expCount} gasto(s)/viático(s) de desplazamiento</li>
+      </ul>
+      <p style="margin-top:10px">No hay forma de recuperar esta información después de eliminarla.</p>
+    </div>`;
+}
+
+function checkDeleteCompanyConfirm() {
+  $('delCompanyConfirmBtn').disabled = !deleteCompanyTarget || $('delCompanyConfirmInput').value.trim() !== deleteCompanyTarget.name;
+}
+
+async function executeDeleteCompany() {
+  if (!deleteCompanyTarget || $('delCompanyConfirmInput').value.trim() !== deleteCompanyTarget.name) return;
+  const target = deleteCompanyTarget;
+  const btn = $('delCompanyConfirmBtn'); btn.disabled = true; const originalText = btn.textContent; btn.textContent = 'Eliminando…';
+  try {
+    // Se deja constancia en la bitácora ANTES de borrar (después ya no habría
+    // una empresa válida a la cual asociar el registro).
+    await logActivity('company_deleted', `Se eliminó la empresa "${target.name}" y todos sus datos asociados (sedes, horas, evidencias, agenda y gastos).`, { companyId: target.id });
+    const { error } = await sb.from('companies').delete().eq('id', target.id);
+    if (error) return toast('No se pudo eliminar: ' + error.message + (error.message?.toLowerCase().includes('foreign key') ? ' (falta correr la migración 0014 en Supabase).' : ''));
+    deleteCompanyTarget = null;
+    closeModal('deleteCompanyModal');
+    await init();
+    toast(`Empresa "${target.name}" eliminada junto con todos sus datos.`);
+  } finally {
+    btn.disabled = false; btn.textContent = originalText;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Wizard: Agregar empresa/sede en 3 pasos (Empresa -> Sede -> Actividades).
