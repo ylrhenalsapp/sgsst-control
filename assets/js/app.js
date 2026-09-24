@@ -590,6 +590,7 @@ function renderDashboard() {
 // esté activo, el comportamiento normal (una sola sede) no cambia en nada.
 // ---------------------------------------------------------------------------
 let hoursShowAll = false;
+let hoursShowCompanyAll = false;
 let activitiesShowAll = false;
 let allHoursRows = null;
 
@@ -600,8 +601,23 @@ async function ensureAllHoursLoaded() {
 
 async function toggleHoursShowAll() {
   hoursShowAll = !hoursShowAll;
+  if (hoursShowAll) { hoursShowCompanyAll = false; updateShowAllButton('hoursShowCompanyAllBtn', false, '🏢 Ver todas las sedes de esta empresa', '🏢 Viendo todas las sedes'); }
   if (hoursShowAll && !allHoursRows) await ensureAllHoursLoaded();
   updateShowAllButton('hoursShowAllBtn', hoursShowAll);
+  renderHours();
+}
+
+// "Ver todas las sedes de esta empresa": a diferencia de "Ver todas las
+// empresas" (que junta TODO sin importar la empresa elegida arriba), este
+// botón respeta la empresa seleccionada en el filtro de arriba y solo junta
+// sus distintas sedes en una sola tabla — para no tener que ir sede por
+// sede dentro de la misma empresa. Reutiliza la misma carga de fondo
+// (allHoursRows) que "Ver todas las empresas" para no duplicar la consulta.
+async function toggleHoursShowCompanyAll() {
+  hoursShowCompanyAll = !hoursShowCompanyAll;
+  if (hoursShowCompanyAll) { hoursShowAll = false; updateShowAllButton('hoursShowAllBtn', false); }
+  if (hoursShowCompanyAll && !allHoursRows) await ensureAllHoursLoaded();
+  updateShowAllButton('hoursShowCompanyAllBtn', hoursShowCompanyAll, '🏢 Ver todas las sedes de esta empresa', '🏢 Viendo todas las sedes');
   renderHours();
 }
 
@@ -612,10 +628,10 @@ async function toggleActivitiesShowAll() {
   renderActivities();
 }
 
-function updateShowAllButton(id, active) {
+function updateShowAllButton(id, active, offLabel, onLabel) {
   const b = $(id); if (!b) return;
   b.classList.toggle('calToggleActive', active);
-  b.textContent = active ? '👁️ Viendo todas las empresas' : '👁️ Ver todas las empresas';
+  b.textContent = active ? (onLabel || '👁️ Viendo todas las empresas') : (offLabel || '👁️ Ver todas las empresas');
 }
 
 function renderActivities() {
@@ -679,6 +695,12 @@ function completedActivityButton(siteId, activityId) {
 
 function renderHours() {
   if (hoursShowAll) { renderHoursRows(allHoursRows || [], true); return; }
+  if (hoursShowCompanyAll) {
+    const c = company();
+    if (!c) { $('hoursTable').innerHTML = `<tr><td colspan="10" class="empty">${noSiteMessage()}</td></tr>`; return; }
+    renderHoursRows((allHoursRows || []).filter(x => x.company_id === c.id), true);
+    return;
+  }
   const s = site();
   if (!s) { $('hoursTable').innerHTML = `<tr><td colspan="10" class="empty">${noSiteMessage()}</td></tr>`; return; }
   renderHoursRows(state.hoursSite.filter(x => x.site_id === s.id), false);
