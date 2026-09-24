@@ -106,22 +106,57 @@ async function saveSchedule(openGoogle, sendEmail) {
     if (error.code === '23P01') return toast('Ese horario ya está ocupado por otra sesión en esta sede (bloqueado por la base de datos).');
     return toast('No se pudo guardar: ' + error.message);
   }
-  if (sendEmail) { state.calendarSite.push(event); prepareScheduleEmail(event.id); }
+  if (sendEmail) { state.calendarSite.push(event); await sendScheduleInvite(event.id); }
   scheduleBrowserReminder(event); closeModal('scheduleModal'); await refreshAll();
   toast('Actividad programada correctamente en tu agenda.');
   if (openGoogle) window.open(googleCalendarUrl(event), '_blank');
 }
-function prepareScheduleEmail(id) {
-  const e = state.calendarSite.find(x => x.id === id); if (!e) return;
-  const subject = encodeURIComponent(`Confirmación de sesión – ${taskName(e.activity_id)}`);
-  window.location.href = `mailto:${encodeURIComponent(e.leader_email || '')}?subject=${subject}&body=${encodeURIComponent(leaderEmailBody(e))}`;
-}
-function downloadICS(id) {
-  const e = state.calendarSite.find(x => x.id === id); if (!e) return;
+// Construye el contenido .ics. method:'PUBLISH' es el archivo de descarga
+// manual de siempre (sin asistente). method:'REQUEST' es una citación real:
+// incluye ORGANIZER/ATTENDEE para que Outlook/Gmail del líder la reconozcan
+// como una invitación con opción de Aceptar/Rechazar, no solo un archivo.
+function buildIcsContent(e, { method = 'PUBLISH', leaderCn = '', leaderEmail = '' } = {}) {
+  const c = state.companies.find(x => x.id === e.company_id), s = c?.sites.find(x => x.id === e.site_id);
   const start = eventDateTime(e), end = eventEnd(e);
   const utc = d => d.toISOString().replace(/[-:]/g, '').replace('.000', '');
-  const title = `${taskName(e.activity_id)}`;
-  const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//SG-SST Control//Agenda//ES\r\nBEGIN:VEVENT\r\nUID:${e.id}@sgsst-control\r\nDTSTAMP:${utc(new Date())}\r\nDTSTART:${utc(start)}\r\nDTEND:${utc(end)}\r\nSUMMARY:${title}\r\nDESCRIPTION:${(e.notes || 'Sesión programada SG-SST').replace(/\n/g, '\\n')}\r\nBEGIN:VALARM\r\nTRIGGER:-PT${Math.max(1, Number(e.reminder_minutes || 30))}M\r\nACTION:DISPLAY\r\nDESCRIPTION:Recordatorio de actividad SG-SST\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR`;
+  const title = `${taskName(e.activity_id)} · ${c?.name || ''} · ${s?.name || ''}`;
+  const desc = (e.notes || 'Sesión programada SG-SST').replace(/\n/g, '\\n');
+  const invite = (method === 'REQUEST' && leaderEmail)
+    ? `\r\nORGANIZER;CN=Yasbleidis López Rhenals:mailto:notificaciones@yasbleidislopez.com\r\nATTENDEE;CN=${leaderCn || 'Líder'};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${leaderEmail}`
+    : '';
+  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//SG-SST Control//Agenda//ES\r\nCALSCALE:GREGORIAN\r\nMETHOD:${method}\r\nBEGIN:VEVENT\r\nUID:${e.id}@sgsst-control\r\nDTSTAMP:${utc(new Date())}\r\nDTSTART:${utc(start)}\r\nDTEND:${utc(end)}\r\nSEQUENCE:0\r\nSTATUS:CONFIRMED${invite}\r\nSUMMARY:${title}\r\nDESCRIPTION:${desc}\r\nBEGIN:VALARM\r\nTRIGGER:-PT${Math.max(1, Number(e.reminder_minutes || 30))}M\r\nACTION:DISPLAY\r\nDESCRIPTION:Recordatorio de actividad SG-SST\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR`;
+}
+// Envía la citación real por correo (con el .ics de invitación adjunto) a
+// través de la función serverless /api/send-schedule-invite, que habla con
+// Resend usando la API key guardada en Vercel (nunca queda expuesta aquí).
+// Reemplaza el antiguo flujo de mailto:, que dependía de que Yasbleidis le
+// diera "Enviar" a mano y no adjuntaba nada reconocible como cita real.
+async function sendScheduleInvite(id) {
+  const e = currentCalendarEvents().find(x => x.id === id);
+  if (!e) return toast('No se encontró la cita.');
+  if (!e.leader_email) return toast('Esta cita no tiene correo del líder registrado.');
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return toast('Tu sesión expiró, vuelve a iniciar sesión.');
+  const subject = `Confirmación de sesión – ${taskName(e.activity_id)}`;
+  const text = leaderEmailBody(e);
+  const ics = buildIcsContent(e, { method: 'REQUEST', leaderCn: e.leader_name || 'Líder', leaderEmail: e.leader_email });
+  toast('Enviando citación…');
+  try {
+    const resp = await fetch('/api/send-schedule-invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ to: e.leader_email, subject, text, ics, filename: `citacion-${e.event_date}.ics` }),
+    });
+    const out = await resp.json().catch(() => ({}));
+    if (!resp.ok) return toast('No se pudo enviar la citación: ' + (out.error || resp.statusText));
+    toast('Citación enviada al correo del líder ✅');
+  } catch (err) {
+    toast('No se pudo enviar la citación: ' + err.message);
+  }
+}
+function downloadICS(id) {
+  const e = currentCalendarEvents().find(x => x.id === id); if (!e) return;
+  const ics = buildIcsContent(e, { method: 'PUBLISH' });
   const blob = new Blob([ics], { type: 'text/calendar' }), a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = `actividad-${e.event_date}-${e.event_time.replace(':', '')}.ics`; a.click(); URL.revokeObjectURL(a.href);
 }
@@ -147,7 +182,7 @@ function showEventInfo(id) {
   const resendBtn = $('eventInfoResendBtn');
   if (resendBtn) {
     resendBtn.style.display = e.leader_email ? 'inline-flex' : 'none';
-    resendBtn.onclick = () => prepareScheduleEmail(e.id);
+    resendBtn.onclick = () => sendScheduleInvite(e.id);
   }
   const deleteBtn = $('eventInfoDeleteBtn');
   if (deleteBtn) {
@@ -164,7 +199,7 @@ function renderCalendar() {
   $('calendarDayCount').textContent = `${events.length} ${events.length === 1 ? 'sesión' : 'sesiones'}${calendarShowAll ? ' · todas las empresas' : ''}`;
   $('calendarDayList').innerHTML = events.length ? events.map(e => {
     const c = state.companies.find(x => x.id === e.company_id), s = c?.sites.find(x => x.id === e.site_id);
-    return `<div class="dayEvent"><div class="time">${e.event_time} · ${e.duration_minutes} min</div><div class="title">${taskName(e.activity_id)}</div><div class="small">${c?.name || ''} · ${s?.name || ''}</div><div class="small">👤 ${e.leader_name || 'Sin líder registrado'}${e.leader_email ? ' · ' + e.leader_email : ''}</div><div class="small">🔔 Recordatorio: ${e.reminder_minutes >= 1440 ? '1 día antes' : e.reminder_minutes + ' min antes'}</div><div style="margin-top:10px;display:flex;gap:7px;flex-wrap:wrap"><button class="secondary" onclick='window.open(googleCalendarUrl(${JSON.stringify(e)}),"_blank")'>Google Calendar</button><button class="secondary" onclick="prepareScheduleEmail('${e.id}')">📩 Correo</button><button class="secondary" onclick="downloadICS('${e.id}')">🔔 .ics</button><button class="danger" data-requires-write onclick="deleteSchedule('${e.id}')">Eliminar</button></div></div>`;
+    return `<div class="dayEvent"><div class="time">${e.event_time} · ${e.duration_minutes} min</div><div class="title">${taskName(e.activity_id)}</div><div class="small">${c?.name || ''} · ${s?.name || ''}</div><div class="small">👤 ${e.leader_name || 'Sin líder registrado'}${e.leader_email ? ' · ' + e.leader_email : ''}</div><div class="small">🔔 Recordatorio: ${e.reminder_minutes >= 1440 ? '1 día antes' : e.reminder_minutes + ' min antes'}</div><div style="margin-top:10px;display:flex;gap:7px;flex-wrap:wrap"><button class="secondary" onclick='window.open(googleCalendarUrl(${JSON.stringify(e)}),"_blank")'>Google Calendar</button><button class="secondary" onclick="sendScheduleInvite('${e.id}')">📩 Enviar citación</button><button class="secondary" onclick="downloadICS('${e.id}')">🔔 .ics</button><button class="danger" data-requires-write onclick="deleteSchedule('${e.id}')">Eliminar</button></div></div>`;
   }).join('') : `<div class="calendarEmpty">No tienes sesiones programadas para este día${calendarShowAll ? ' (en ninguna empresa)' : ''}. Tu agenda está disponible. ✨</div>`;
   const all = source.filter(e => e.event_date === date);
   $('availabilityBox').innerHTML = `<div class="availabilityCard"><b>${formatDate(date)}</b><p class="small">${all.length ? 'Tienes ' + all.length + ' bloque(s) de tiempo ocupados en tu agenda interna.' : 'No tienes actividades programadas. Día disponible para nuevas sesiones.'}</p><div class="small"><b>Nota:</b> esta disponibilidad corresponde a las actividades registradas dentro de esta plataforma${calendarShowAll ? ', de todas las empresas' : ''}. Al usar "Google Calendar" puedes agregar la sesión a tu agenda personal.</div></div>`;
