@@ -102,10 +102,16 @@ function site() { const c = company(); return c?.sites.find(s => s.id === $('fil
 function selectedMonth() { return $('filterMonth').value || monthNow(); }
 function taskName(id) { return state.activities.find(t => t.id === id)?.name || 'Actividad'; }
 function safeUrl(u) { return /^https?:\/\//i.test(u || '') ? u : '#'; }
-// La tarifa es POR EMPRESA (no por sede ni global): cada empresa trae su
-// propia companies.rate. state.rate solo queda como último recurso (empresa
-// sin tarifa cargada, o ningún filtro seleccionado todavía).
-function companyRate(c) { return Number(c?.rate ?? state.rate ?? 50000); }
+// La tarifa es POR PROVEEDOR cuando la empresa tiene uno asignado y ese
+// proveedor tiene tarifa cargada (todas las empresas de ese proveedor
+// cobran igual — migración 0018). Si la empresa no tiene proveedor, o su
+// proveedor todavía no tiene tarifa propia, se usa la tarifa de la empresa
+// (companies.rate) como antes. state.rate solo queda como último recurso.
+function providerRateFor(c) {
+  const p = c?.provider_id ? state.providers.find(x => x.id === c.provider_id) : null;
+  return (p && Number(p.rate) > 0) ? Number(p.rate) : null;
+}
+function companyRate(c) { return providerRateFor(c) ?? Number(c?.rate ?? state.rate ?? 50000); }
 // Mensaje para cuando no hay ninguna sede seleccionable: distingue entre "no
 // tienes ninguna empresa todavía" y "esta empresa existe pero se quedó sin
 // sedes" (empresa inactiva — se puede eliminar la última sede de una
@@ -955,14 +961,19 @@ async function saveHours() {
   // fecha ya esté cerrado (chequeo siguiente).
   if (!wasEditing && taskIsCompleted(s.id, taskId)) return toast('Esta actividad ya está completada y no admite más horas.');
   if (monthClosed(s.id, m)) return toast('Ese mes ya está cerrado para esta sede. Reábrelo primero si necesitas cambiar algo.');
-  const editingRecord = wasEditing ? state.hoursSite.find(x => x.id === editingHourId) : null;
-  const oldHours = (editingRecord && editingRecord.site_id === s.id && monthOf(editingRecord.record_date) === m) ? Number(editingRecord.hours) : 0;
-  const { data: bagData } = await sb.rpc('get_bag_summary', { p_site_id: s.id, p_month: `${m}-01` });
-  const available = ((bagData && bagData[0]?.remaining) || 0) + oldHours;
-  if (h > available) {
-    toast(`Para ${m} solo quedan ${available} h en la bolsa. Puedes agregar horas adicionales al mes.`);
-    if (!wasEditing) { closeModal('hoursModal'); openAdditionalHoursModal(c.id, s.id, m); }
-    return;
+  // La bolsa de horas (presupuesto mensual) solo se valida al REGISTRAR
+  // horas nuevas, que es lo que realmente la consume. Editar un registro ya
+  // existente es corregir fecha/horas/actividad de algo que ya se ejecutó —
+  // no vuelve a consumir bolsa, así que la edición no se bloquea por
+  // disponibilidad (la bolsa en sí no cambia con la edición).
+  if (!wasEditing) {
+    const { data: bagData } = await sb.rpc('get_bag_summary', { p_site_id: s.id, p_month: `${m}-01` });
+    const available = (bagData && bagData[0]?.remaining) || 0;
+    if (h > available) {
+      toast(`Para ${m} solo quedan ${available} h en la bolsa. Puedes agregar horas adicionales al mes.`);
+      closeModal('hoursModal'); openAdditionalHoursModal(c.id, s.id, m);
+      return;
+    }
   }
   const status = $('hStatus').value;
   let error;
@@ -1185,17 +1196,27 @@ async function renderConfig() {
   }
   $('cfg-sites').innerHTML = `<div class="panelhead"><h2>Bolsas mensuales de horas</h2><div><button class="success" data-requires-write onclick="openMonthlyBagModal()">+ Asignar bolsa del mes</button> <button class="primary" data-requires-write onclick="openSiteWizard()">+ Agregar sede</button></div></div><p class="small">Periodo mostrado: <b>${m}</b>. El saldo no utilizado del mes anterior se suma automáticamente como saldo a favor.</p><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sede</th><th>Asignadas</th><th>Saldo anterior</th><th>Adicionales</th><th>Usadas</th><th>Disponibles</th><th>Acción</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 
-  // La tarifa es por EMPRESA, no global ni por sede: cada empresa tiene la
-  // suya propia, y se propone automáticamente al registrar horas nuevas de
-  // esa empresa. Cambiar esto no afecta los registros ya guardados (cada
-  // uno conserva la tarifa con la que se creó).
-  $('cfg-rates').innerHTML = `<div class="panelhead"><h2>Tarifas por empresa</h2></div><p class="small">Cada empresa tiene su propia tarifa por hora. Se propone para los registros nuevos de esa empresa; los ya guardados conservan la suya.</p><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Tarifa por hora (COP)</th><th></th></tr></thead><tbody>${state.companies.length ? state.companies.map(c => `<tr><td>${c.name}</td><td><input id="rate-${c.id}" type="number" min="0" step="1000" value="${companyRate(c)}" style="width:150px"></td><td><button class="primary" data-requires-write onclick="updateCompanyRate('${c.id}')">Guardar</button></td></tr>`).join('') : '<tr><td colspan="3" class="empty">Todavía no tienes ninguna empresa registrada.</td></tr>'}</tbody></table></div>`;
+  // La tarifa se propone automáticamente al registrar horas nuevas, y se
+  // toma del PROVEEDOR de la empresa cuando ese proveedor tiene una tarifa
+  // cargada (todas sus empresas cobran igual — se edita en Proveedores, no
+  // aquí). Solo las empresas sin proveedor, o cuyo proveedor todavía no
+  // tiene tarifa propia, mantienen su tarifa editable aquí. Cambiar esto no
+  // afecta los registros ya guardados (cada uno conserva la tarifa con la
+  // que se creó).
+  $('cfg-rates').innerHTML = `<div class="panelhead"><h2>Tarifas por empresa</h2></div><p class="small">Si una empresa tiene proveedor y ese proveedor tiene tarifa cargada, se usa esa (edítala en Proveedores). Las empresas sin proveedor, o cuyo proveedor no tiene tarifa propia, usan su propia tarifa aquí.</p><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Tarifa por hora (COP)</th><th></th></tr></thead><tbody>${state.companies.length ? state.companies.map(c => {
+    const pRate = providerRateFor(c);
+    if (pRate != null) {
+      const p = state.providers.find(x => x.id === c.provider_id);
+      return `<tr><td>${c.name}</td><td>${money(pRate)} <span class="small">(tarifa de ${p?.name || 'su proveedor'})</span></td><td><span class="small">Se edita en Proveedores</span></td></tr>`;
+    }
+    return `<tr><td>${c.name}</td><td><input id="rate-${c.id}" type="number" min="0" step="1000" value="${companyRate(c)}" style="width:150px"></td><td><button class="primary" data-requires-write onclick="updateCompanyRate('${c.id}')">Guardar</button></td></tr>`;
+  }).join('') : '<tr><td colspan="3" class="empty">Todavía no tienes ninguna empresa registrada.</td></tr>'}</tbody></table></div>`;
   $('cfg-tasks').innerHTML = `<div class="panelhead"><h2>Actividades del proyecto</h2><button class="primary" data-requires-write onclick="addTaskPrompt()">+ Nueva actividad</button></div>${state.activities.map(t => `<div class="activity"><div class="activityTop"><div><b>${t.name}</b>${t.is_fixed ? '<div class="small">Actividad inicial establecida</div>' : '<div class="small">Actividad agregada</div>'}</div><button class="secondary" data-requires-write onclick="editTaskPrompt('${t.id}')">✏️ Editar nombre</button></div></div>`).join('')}`;
 
   // Proveedores: nombre + datos de facturación (NIT, gerente, dirección...)
   // usados para llenar solos el encabezado de la Cuenta de cobro de cada
   // proveedor (Informes → Cuenta de cobro).
-  $('cfg-providers').innerHTML = `<div class="panelhead"><h2>Proveedores</h2><button class="primary" data-requires-write onclick="addProviderPrompt()">+ Agregar proveedor</button></div><p class="small">Estos datos llenan el encabezado de la Cuenta de cobro de cada proveedor. El nombre es obligatorio; lo demás es opcional.</p>${state.providers.length ? state.providers.map(p => `
+  $('cfg-providers').innerHTML = `<div class="panelhead"><h2>Proveedores</h2><button class="primary" data-requires-write onclick="addProviderPrompt()">+ Agregar proveedor</button></div><p class="small">Estos datos llenan el encabezado de la Cuenta de cobro de cada proveedor. El nombre es obligatorio; lo demás es opcional. Si cargas una tarifa por hora, se propone sola para todas las empresas de este proveedor (migración 0018).</p>${state.providers.length ? state.providers.map(p => `
     <div class="panel" style="margin-bottom:14px">
       <div class="formgrid">
         <div><label>Nombre</label><input id="provName-${p.id}" value="${p.name || ''}"></div>
@@ -1204,6 +1225,7 @@ async function renderConfig() {
         <div><label>Dirección</label><input id="provDireccion-${p.id}" value="${p.direccion || ''}"></div>
         <div><label>Ciudad</label><input id="provCiudad-${p.id}" value="${p.ciudad || ''}"></div>
         <div><label>Teléfono</label><input id="provTelefono-${p.id}" value="${p.telefono || ''}"></div>
+        <div><label>Tarifa por hora (COP)</label><input id="provRate-${p.id}" type="number" min="0" step="1000" value="${p.rate || ''}" placeholder="Aplica a todas sus empresas"></div>
         <div class="full"><label>Email de radicación de cuentas</label><input id="provEmail-${p.id}" value="${p.email_radicacion || ''}"></div>
       </div>
       <button class="primary" data-requires-write onclick="updateProvider('${p.id}')" style="margin-top:10px">Guardar</button>
@@ -1802,6 +1824,7 @@ async function addProviderPrompt() {
 async function updateProvider(id) {
   const name = $('provName-' + id)?.value.trim();
   if (!name) return toast('El nombre del proveedor no puede quedar vacío.');
+  const rateVal = Number($('provRate-' + id)?.value || 0);
   const payload = {
     name,
     nit: $('provNit-' + id)?.value.trim() || null,
@@ -1810,12 +1833,14 @@ async function updateProvider(id) {
     ciudad: $('provCiudad-' + id)?.value.trim() || null,
     telefono: $('provTelefono-' + id)?.value.trim() || null,
     email_radicacion: $('provEmail-' + id)?.value.trim() || null,
+    rate: rateVal > 0 ? rateVal : null,
   };
   const { error } = await sb.from('providers').update(payload).eq('id', id);
-  if (error) return toast('No se pudo actualizar el proveedor: ' + error.message + (error.message?.includes('nit') ? ' (falta correr la migración 0012 en Supabase).' : ''));
+  if (error) return toast('No se pudo actualizar el proveedor: ' + error.message + (error.message?.includes('nit') || error.message?.includes('rate') ? ' (falta correr la migración 0012 y/o 0018 en Supabase).' : ''));
   const p = state.providers.find(x => x.id === id);
   if (p) Object.assign(p, payload);
   toast('Datos del proveedor actualizados.');
+  renderConfig();
 }
 
 // ---------------------------------------------------------------------------
