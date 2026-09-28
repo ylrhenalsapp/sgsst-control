@@ -104,11 +104,17 @@ function googleCalendarUrl(e) {
   const details = `Sesión programada por Yasbleidis López Rhenals.\nLíder: ${e.leader_name || '-'}${meetLine}\n${e.notes || ''}`;
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${fmt(start)}/${fmt(end)}&details=${encodeURIComponent(details)}`;
 }
-async function saveSchedule(openGoogle, sendEmail) {
+// Antes había tres botones distintos (guardar solo, guardar+enviar citación,
+// guardar+enlace manual de Google Calendar) y era fácil confundirse: el
+// enlace manual NO pasaba por la API de Google y por eso nunca generaba
+// Meet. Ahora hay un solo botón/flujo: siempre se guarda la sesión, se crea
+// el evento real en el Google Calendar de Yasbleidis (con Meet automático
+// si es virtual) y se envía la citación al correo del líder.
+async function saveSchedule() {
   if (!checkScheduleAvailability()) return toast('El horario seleccionado se cruza con otra actividad de tu agenda.');
   const companyId = $('scCompany').value, siteId = $('scSite').value, taskId = $('scTask').value, date = $('scDate').value, time = $('scTime').value;
   if (!date || !time) return toast('Define la fecha y hora de la sesión.');
-  if (sendEmail && !$('scEmail').value.trim()) return toast('Ingresa el correo del líder para poder enviarle la notificación.');
+  if (!$('scEmail').value.trim()) return toast('Ingresa el correo del líder para poder enviarle la citación.');
   const { data: event, error } = await sb.from('schedule_events').insert({
     company_id: companyId, site_id: siteId, activity_id: taskId, event_date: date, event_time: time,
     duration_minutes: Number($('scDuration').value || 60), leader_name: $('scLeader').value.trim(), leader_email: $('scEmail').value.trim(),
@@ -119,10 +125,9 @@ async function saveSchedule(openGoogle, sendEmail) {
     if (error.code === '23P01') return toast('Ese horario ya está ocupado por otra sesión en esta sede (bloqueado por la base de datos).');
     return toast('No se pudo guardar: ' + error.message);
   }
-  if (sendEmail) { state.calendarSite.push(event); await sendScheduleInvite(event.id); }
+  state.calendarSite.push(event);
+  await sendScheduleInvite(event.id);
   scheduleBrowserReminder(event); closeModal('scheduleModal'); await refreshAll();
-  toast('Actividad programada correctamente en tu agenda.');
-  if (openGoogle) window.open(googleCalendarUrl(event), '_blank');
 }
 // Construye el contenido .ics. method:'PUBLISH' es el archivo de descarga
 // manual de siempre (sin asistente). method:'REQUEST' es una citación real:
