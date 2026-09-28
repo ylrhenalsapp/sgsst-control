@@ -14,7 +14,7 @@
   (celular, otra sesión abierta, etc.) se queda pegado en una versión vieja
   esperando que alguien limpie el caché a mano.
 -->
-<meta name="build-version" content="2026-09-28T13:42:43Z">
+<meta name="build-version" content="2026-09-28T13:54:28Z">
 <script>
 (function () {
   var CURRENT = document.querySelector('meta[name="build-version"]')?.content || '';
@@ -362,7 +362,7 @@
 
 <div class="modal" id="scheduleModal"><div class="modalbox">
 <h2>🗓️ Programar actividad</h2>
-<p class="small">Define la fecha y hora de la sesión según la disponibilidad de tu agenda.</p>
+<p class="small">Define la fecha y hora de la sesión según la disponibilidad de tu agenda. Al guardar se crea automáticamente en tu Google Calendar (con Google Meet si es virtual) y se envía la citación al correo del líder.</p>
 <div class="formgrid">
   <div><label>Empresa</label><select id="scCompany" onchange="scheduleCompanyChanged()"></select></div>
   <div id="scSiteWrap"><label>Sede</label><select id="scSite"></select></div>
@@ -379,9 +379,7 @@
 </div>
 <div class="actions">
   <button class="secondary" onclick="closeModal('scheduleModal')">Cancelar</button>
-  <button class="secondary" onclick="saveSchedule(false,false)">Guardar programación</button>
-  <button class="primary" onclick="saveSchedule(false,true)">📩 Guardar + enviar citación al líder</button>
-  <button class="success" onclick="saveSchedule(true,false)">Guardar + Google Calendar</button>
+  <button class="primary" onclick="saveSchedule()">📩 Guardar y enviar citación</button>
 </div>
 </div></div>
 
