@@ -193,7 +193,13 @@ async function sendScheduleInvite(id) {
       renderCalendar(); renderFullCalendar();
     }
     if (out.calendarWarning) {
-      toast('Citación enviada al correo del líder ✅ (aviso: no se pudo crear en tu calendario de Google — ' + out.calendarWarning + ')');
+      // Si ya tenemos googleEventId, el evento SÍ quedó creado en el
+      // calendario — el aviso es específicamente sobre el link de Meet (o
+      // sobre algún otro detalle), no sobre la creación del evento en sí.
+      const prefix = out.googleEventId
+        ? 'Citación enviada al correo del líder ✅ (aviso: '
+        : 'Citación enviada al correo del líder ✅ (aviso: no se pudo crear en tu calendario de Google — ';
+      toast(prefix + out.calendarWarning + ')');
     } else {
       toast('Citación enviada al correo del líder ✅' + (out.meetLink ? ' · Meet y calendario listos' : ''));
     }
