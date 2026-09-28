@@ -14,7 +14,7 @@
   (celular, otra sesión abierta, etc.) se queda pegado en una versión vieja
   esperando que alguien limpie el caché a mano.
 -->
-<meta name="build-version" content="2026-09-24T18:16:56Z">
+<meta name="build-version" content="2026-09-28T13:42:43Z">
 <script>
 (function () {
   var CURRENT = document.querySelector('meta[name="build-version"]')?.content || '';
@@ -362,7 +362,7 @@
 
 <div class="modal" id="scheduleModal"><div class="modalbox">
 <h2>🗓️ Programar actividad</h2>
-<p class="small">Registra la disponibilidad informada por el líder y define la fecha final según la disponibilidad de tu agenda.</p>
+<p class="small">Define la fecha y hora de la sesión según la disponibilidad de tu agenda.</p>
 <div class="formgrid">
   <div><label>Empresa</label><select id="scCompany" onchange="scheduleCompanyChanged()"></select></div>
   <div id="scSiteWrap"><label>Sede</label><select id="scSite"></select></div>
@@ -370,9 +370,7 @@
   <div class="full"><label>Actividad</label><select id="scTask"></select></div>
   <div><label>Nombre del líder</label><input id="scLeader" placeholder="Ej: Juan Pérez"></div>
   <div><label>Correo del líder</label><input id="scEmail" type="email" placeholder="correo@empresa.com"></div>
-  <div><label>Disponibilidad informada por el líder</label><input id="scProposedDate" type="date"></div>
-  <div><label>Hora propuesta por el líder</label><input id="scProposedTime" type="time" step="1800"></div>
-  <div><label>Fecha programada por Yasbleidis</label><input id="scDate" type="date" onchange="checkScheduleAvailability()"></div>
+  <div><label>Fecha programada</label><input id="scDate" type="date" onchange="checkScheduleAvailability()"></div>
   <div><label>Hora programada</label><input id="scTime" type="time" step="1800" onchange="checkScheduleAvailability()"></div>
   <div><label>Duración estimada (minutos)</label><input id="scDuration" type="number" min="15" step="15" value="60" onchange="checkScheduleAvailability()"></div>
   <div><label>Recordatorio</label><select id="scReminder"><option value="30">30 minutos antes</option><option value="60">1 hora antes</option><option value="1440">1 día antes</option></select></div>
