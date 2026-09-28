@@ -14,7 +14,7 @@
   (celular, otra sesión abierta, etc.) se queda pegado en una versión vieja
   esperando que alguien limpie el caché a mano.
 -->
-<meta name="build-version" content="2026-09-28T14:48:33Z">
+<meta name="build-version" content="2026-09-28T17:23:28Z">
 <script>
 (function () {
   var CURRENT = document.querySelector('meta[name="build-version"]')?.content || '';
@@ -282,6 +282,7 @@
 <div class="full"><label>Actividad</label><select id="aTask"></select></div>
 <div><label>Estado</label><select id="aStatus"><option value="Completado">Completado</option><option value="En proceso">En proceso</option><option value="Pendiente">Pendiente</option></select></div>
 <div><label>Horas ejecutadas en este avance</label><input id="aHours" type="number" min="0" step="0.25" value="0" placeholder="Ej: 2.5"></div>
+<div><label>Fecha del avance</label><input id="aDate" type="date"></div>
 <div class="full"><div id="aBagInfo" class="scheduleInfo">Bolsa disponible: --</div></div><div class="full"><label>Observación</label><textarea id="aNotes"></textarea></div>
 </div><div class="actions"><button class="secondary" onclick="closeModal('activityModal')">Cancelar</button><button class="primary" onclick="saveActivity()">Guardar avance</button></div></div></div>
 
