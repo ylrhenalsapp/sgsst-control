@@ -56,7 +56,7 @@ function openScheduleModal() {
   if (!company() || !site()) return toast('Primero agrega una empresa y una sede desde Configuración.');
   fillCommon('scCompany', 'scSite', 'scTask');
   $('scCompany').value = company().id; fillSiteSelect('scCompany', 'scSite'); $('scSite').value = site().id;
-  $('scLeader').value = ''; $('scEmail').value = ''; $('scProposedDate').value = ''; $('scProposedTime').value = '';
+  $('scLeader').value = ''; $('scEmail').value = '';
   $('scDate').value = $('calendarDate')?.value || today(); $('scTime').value = '09:00'; $('scDuration').value = 60; $('scReminder').value = '30'; $('scNotes').value = '';
   if ($('scModality')) $('scModality').value = 'presencial'; scheduleModalityChanged();
   checkScheduleAvailability(); openModal('scheduleModal');
@@ -101,7 +101,7 @@ function googleCalendarUrl(e) {
   const fmt = d => d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + 'T' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + '00';
   const title = `${taskName(e.activity_id)} · ${c?.name || ''} · ${s?.name || ''}`;
   const meetLine = e.modality === 'virtual' && e.meet_link ? `\nGoogle Meet: ${e.meet_link}` : '';
-  const details = `Sesión programada por Yasbleidis López Rhenals.\nLíder: ${e.leader_name || '-'}\nDisponibilidad informada: ${e.proposed_date || '-'} ${e.proposed_time || ''}${meetLine}\n${e.notes || ''}`;
+  const details = `Sesión programada por Yasbleidis López Rhenals.\nLíder: ${e.leader_name || '-'}${meetLine}\n${e.notes || ''}`;
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${fmt(start)}/${fmt(end)}&details=${encodeURIComponent(details)}`;
 }
 async function saveSchedule(openGoogle, sendEmail) {
@@ -112,7 +112,6 @@ async function saveSchedule(openGoogle, sendEmail) {
   const { data: event, error } = await sb.from('schedule_events').insert({
     company_id: companyId, site_id: siteId, activity_id: taskId, event_date: date, event_time: time,
     duration_minutes: Number($('scDuration').value || 60), leader_name: $('scLeader').value.trim(), leader_email: $('scEmail').value.trim(),
-    proposed_date: $('scProposedDate').value || null, proposed_time: $('scProposedTime').value || null,
     reminder_minutes: Number($('scReminder').value || 30), notes: $('scNotes').value.trim(), created_by: currentProfile?.id,
     modality: $('scModality')?.value || 'presencial',
   }).select().single();
