@@ -387,6 +387,16 @@ async function renderInvoiceReport() {
     const nextMonth = `${new Date(y, mm, 1).toISOString().slice(0, 7)}-01`;
     const companyIds = new Set(providerCompanies.map(c => c.id));
     const companyName = id => state.companies.find(c => c.id === id)?.name || '—';
+    // La cuenta de cobro se pidió explícitamente que SIEMPRE muestre la
+    // tarifa REAL/actual del proveedor (Configuración → Proveedores/Tarifas),
+    // sin importar qué tarifa haya quedado guardada en cada hour_records al
+    // momento de registrarlo, y sin importar si ese registro ya está
+    // "Pagado" o no. Por eso aquí NO se usa x.rate (la foto fija histórica)
+    // sino que se recalcula con companyRate(c) en el momento de generar el
+    // documento — así, si Yasbleidis actualiza la tarifa de un proveedor,
+    // la próxima vez que abra o regenere la cuenta de cobro (de cualquier
+    // mes, incluso uno ya facturado) sale con el precio real de hoy.
+    const currentRateFor = companyId => companyRate(state.companies.find(c => c.id === companyId));
 
     const { data: hoursRows } = await sb.from('hour_records').select('*').gte('record_date', `${m}-01`).lt('record_date', nextMonth);
     // Viáticos (migración 0012): "a prueba de fallos" — si todavía no se
@@ -401,7 +411,7 @@ async function renderInvoiceReport() {
     const expRows = expenseRows.filter(x => companyIds.has(x.company_id)).sort((a, b) => a.record_date.localeCompare(b.record_date));
 
     const genDate = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
-    const actTotal = actRows.reduce((a, x) => a + Number(x.hours) * Number(x.rate), 0);
+    const actTotal = actRows.reduce((a, x) => a + Number(x.hours) * currentRateFor(x.company_id), 0);
     const expTotal = expRows.reduce((a, x) => a + Number(x.amount), 0);
     const grandTotal = actTotal + expTotal;
     const adv = state.advisorProfile || {};
@@ -488,7 +498,7 @@ async function renderInvoiceReport() {
 
     <div class="reportSectionTitle" style="margin-top:22px">Detalle — Actividades realizadas</div>
     <div class="tablewrap"><table><thead><tr><th>No.</th><th>Fecha</th><th>Empresa</th><th>Descripción</th><th>Cantidad</th><th>Valor unitario</th><th>Valor total</th></tr></thead><tbody>
-      ${actRows.length ? actRows.map((x, i) => `<tr><td>${i + 1}</td><td>${x.record_date}</td><td>${companyName(x.company_id)}</td><td>${taskName(x.activity_id)}${x.notes ? ' · ' + x.notes : ''}</td><td>${x.hours} h</td><td>${money(x.rate)}</td><td>${money(x.hours * x.rate)}</td></tr>`).join('') : '<tr><td colspan="7" class="empty">Sin actividades registradas en este periodo.</td></tr>'}
+      ${actRows.length ? actRows.map((x, i) => { const r = currentRateFor(x.company_id); return `<tr><td>${i + 1}</td><td>${x.record_date}</td><td>${companyName(x.company_id)}</td><td>${taskName(x.activity_id)}${x.notes ? ' · ' + x.notes : ''}</td><td>${x.hours} h</td><td>${money(r)}</td><td>${money(x.hours * r)}</td></tr>`; }).join('') : '<tr><td colspan="7" class="empty">Sin actividades registradas en este periodo.</td></tr>'}
       <tr style="font-weight:800;background:#f4f7fa"><td colspan="6">Subtotal actividades</td><td>${money(actTotal)}</td></tr>
     </tbody></table></div>
 
