@@ -1035,6 +1035,11 @@ function openActivityModal(taskId) {
   const chosen = taskId || firstOpenActivity(s.id);
   $('aTask').innerHTML = activityTaskOptions(s.id, chosen);
   $('aTask').value = chosen;
+  // La fecha del avance se propone en "hoy" pero queda editable, para poder
+  // registrar avances de días anteriores (p. ej. horas cargadas con
+  // retraso). Antes el guardado usaba siempre today() por dentro, sin
+  // mostrar ni dejar cambiar esta fecha.
+  $('aDate').value = today();
   refreshActivityModalState();
   openModal('activityModal');
 }
@@ -1075,7 +1080,17 @@ async function saveActivity() {
   const c = state.companies.find(x => x.id === $('aCompany').value), s = c?.sites.find(x => x.id === $('aSite').value), tid = $('aTask').value;
   if (!c || !s) return toast('Selecciona una empresa y sede válida.');
   if (taskIsCompleted(s.id, tid)) return toast('La actividad ya fue completada y no puede modificarse.');
-  const status = $('aStatus').value, hours = Number($('aHours').value || 0), m = selectedMonth();
+  const status = $('aStatus').value, hours = Number($('aHours').value || 0);
+  // Fecha del avance: antes se guardaba siempre today() sin mostrarla ni
+  // dejar que la persona la cambiara. Ahora es un campo editable en el
+  // modal (por defecto "hoy"), para poder registrar avances de días
+  // anteriores. La bolsa de horas se valida contra el MES DE ESA FECHA (no
+  // contra el mes que esté seleccionado en el filtro de arriba), porque si
+  // se está cargando un avance atrasado de un mes distinto, lo que importa
+  // es la bolsa de ese mes.
+  const recordDate = $('aDate').value;
+  if (!recordDate) return toast('Selecciona la fecha del avance.');
+  const m = recordDate.slice(0, 7);
   if (hours < 0) return toast('Las horas no pueden ser negativas.');
   if (hours === 0 && status !== 'Completado') return toast('Ingresa las horas ejecutadas en este avance.');
 
@@ -1089,11 +1104,11 @@ async function saveActivity() {
     // horas ya ejecutadas, así que aquí se normaliza antes de insertar.
     const hrStatus = status === 'Completado' ? 'Completado' : 'En proceso';
     const { error } = await sb.from('hour_records').insert({
-      company_id: c.id, site_id: s.id, activity_id: tid, record_date: today(),
+      company_id: c.id, site_id: s.id, activity_id: tid, record_date: recordDate,
       hours, rate: companyRate(c), status: hrStatus, notes: $('aNotes').value, source: 'avance', created_by: currentProfile?.id,
     });
     if (error) return toast('No se pudo guardar: ' + error.message);
-    logActivity('hours_registered', `Se registraron ${hours} h en "${taskName(tid)}" (${s.name}) el ${today()}.`, { companyId: c.id, siteId: s.id });
+    logActivity('hours_registered', `Se registraron ${hours} h en "${taskName(tid)}" (${s.name}) el ${recordDate}.`, { companyId: c.id, siteId: s.id });
   } else {
     // Pendiente/En proceso sin horas: solo cambia el estado, sin registrar horas.
     const { error } = await sb.from('activity_status_history').insert({
