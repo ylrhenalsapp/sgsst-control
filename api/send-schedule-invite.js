@@ -122,6 +122,14 @@ module.exports = async (req, res) => {
       }
     }
     const meetLink = calendarResult.meetLink || null;
+    // El evento pudo haberse creado bien (sin error) pero sin lograr el link
+    // de Meet a tiempo — upsertCalendarEvent ya trae el motivo en ese caso.
+    // Antes esto se perdía en silencio: el correo se enviaba sin Meet y sin
+    // ningún aviso de por qué. Ahora ese motivo también viaja como
+    // calendarWarning para que se vea en el toast de la app.
+    if (!calendarWarning && calendarResult.meetLinkWarning) {
+      calendarWarning = calendarResult.meetLinkWarning;
+    }
 
     // Si es virtual y ya tenemos el link real de Meet, se lo agregamos
     // también al texto plano de respaldo (el HTML ya lo incluye más abajo).
