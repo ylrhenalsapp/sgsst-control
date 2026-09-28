@@ -48,8 +48,23 @@ function scheduleInviteBodyHtml(d, meetLink) {
 
 // Fecha+hora locales (America/Bogota) -> "YYYY-MM-DDTHH:MM:SS" sin offset,
 // tal como lo espera la Google Calendar API cuando se manda timeZone aparte.
+//
+// BUG ENCONTRADO: el formulario guarda scTime como "HH:MM" (sin segundos,
+// tal como lo entrega un <input type="time">), pero Postgres devuelve las
+// columnas "time" con segundos incluidos ("HH:MM:SS") — y el evento recién
+// creado que dispara el envío de la citación (justo después del insert)
+// viene con ese formato "HH:MM:SS" de vuelta desde Supabase. Como aquí se
+// concatenaba a ciegas `${timeStr}:00`, un timeStr que YA traía segundos
+// quedaba como "09:00:00:00" — una fecha inválida para el motor de
+// JavaScript, que silenciosamente produce "NaN-NaN-NaNTNaN:NaN:00" en vez de
+// lanzar un error. Ese valor corrupto era lo que Google Calendar rechazaba
+// con "Bad Request": el problema nunca fue Meet ni el token de Google, sino
+// que la fecha/hora del evento llegaba dañada. Ahora se normaliza timeStr a
+// "HH:MM" (tomando solo los primeros 5 caracteres) sin importar si venía con
+// o sin segundos, así el resultado siempre es una fecha válida.
 function toLocalISO(dateStr, timeStr, addMinutes = 0) {
-  const d = new Date(`${dateStr}T${timeStr}:00`);
+  const timeHHMM = String(timeStr || '').slice(0, 5);
+  const d = new Date(`${dateStr}T${timeHHMM}:00`);
   d.setMinutes(d.getMinutes() + addMinutes);
   const pad = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
