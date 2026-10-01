@@ -1933,3 +1933,42 @@ showSection = function (id, el) {
     }, 50);
   }
 };
+
+// ============================================================================
+// V20: gesto de deslizar (swipe) para abrir/cerrar el menú lateral en
+// pantallas táctiles (celular y iPad en modo "móvil", <=900px). Deslizar
+// desde el borde izquierdo hacia la derecha abre el menú; deslizar hacia la
+// izquierda con el menú abierto lo cierra. Si el gesto es más vertical que
+// horizontal se ignora, para no interferir con el scroll normal de la
+// página.
+// ============================================================================
+(function () {
+  let touchStartX = null, touchStartY = null, tracking = false;
+  document.addEventListener('touchstart', e => {
+    if (window.innerWidth > 900) return;
+    const sidebar = document.querySelector('.sidebar');
+    if (!sidebar) return;
+    const t = e.touches[0];
+    const alreadyOpen = sidebar.classList.contains('open');
+    // Para abrir, el gesto debe empezar cerca del borde izquierdo (como en
+    // iOS); para cerrar, puede empezar en cualquier parte del menú abierto.
+    if (!alreadyOpen && t.clientX > 28) return;
+    touchStartX = t.clientX; touchStartY = t.clientY; tracking = true;
+  }, { passive: true });
+  document.addEventListener('touchmove', e => {
+    if (!tracking || touchStartY === null) return;
+    const t = e.touches[0];
+    if (Math.abs(t.clientY - touchStartY) > 60) tracking = false;
+  }, { passive: true });
+  document.addEventListener('touchend', e => {
+    if (!tracking || touchStartX === null) { tracking = false; touchStartX = null; return; }
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStartX;
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) {
+      if (dx > 45 && !sidebar.classList.contains('open')) toggleMobileMenu(true);
+      else if (dx < -45 && sidebar.classList.contains('open')) toggleMobileMenu(false);
+    }
+    tracking = false; touchStartX = null; touchStartY = null;
+  }, { passive: true });
+})();

@@ -306,13 +306,29 @@ function renderFullCalendar() {
   });
   if (!fullCalendarInstance && !calendarSectionVisible()) { pendingCalendarEvents = events; return; }
   if (!fullCalendarInstance) {
+    // V20: en un celular (ancho angosto) la vista de mes completo deja las
+    // celdas demasiado chicas para leer o tocar un evento con el dedo — se
+    // abre en vista de lista semanal en su lugar, y el toolbar se simplifica
+    // (menos botones = más fáciles de tocar). En tablet/escritorio se
+    // mantiene la vista de mes de siempre. windowResize detecta si el
+    // dispositivo se rotó (por ejemplo un iPad de vertical a horizontal) y
+    // cambia de vista sola, sin que la persona tenga que hacerlo a mano.
+    const isNarrowScreen = () => window.innerWidth <= 640;
     fullCalendarInstance = new FullCalendar.Calendar(el, {
       locale: 'es',
       height: 'auto',
-      headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' },
-      initialView: 'dayGridMonth',
+      headerToolbar: isNarrowScreen()
+        ? { left: 'prev,next', center: 'title', right: 'today' }
+        : { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' },
+      initialView: isNarrowScreen() ? 'listWeek' : 'dayGridMonth',
       editable: true,
       events,
+      windowResize: () => {
+        const wantNarrow = isNarrowScreen();
+        const isListView = fullCalendarInstance.view.type === 'listWeek';
+        if (wantNarrow && !isListView) fullCalendarInstance.changeView('listWeek');
+        else if (!wantNarrow && isListView) fullCalendarInstance.changeView('dayGridMonth');
+      },
       eventClick: info => { $('calendarDate').value = info.event.startStr.slice(0, 10); renderCalendar(); showEventInfo(info.event.id); },
       eventDrop: async info => {
         const newDate = info.event.startStr.slice(0, 10), newTime = info.event.startStr.slice(11, 16);
