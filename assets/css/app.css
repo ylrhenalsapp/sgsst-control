@@ -535,3 +535,65 @@ select{accent-color:var(--navy);cursor:pointer}
 .invoiceSignerName{text-align:center;font-weight:800;color:var(--navy);margin:10px 0 0;font-size:13px;letter-spacing:.3px;text-transform:uppercase}
 .invoiceFooter{display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-top:34px;padding-top:12px;border-top:1px solid var(--line);font-size:10.5px;color:var(--muted)}
 @media print{.invoiceHeader,.reportGrid2{break-inside:avoid}}
+
+/* ============================================================================
+   V20: TÁCTIL Y TABLET (iPad / celular) — pensado a partir de 3 problemas
+   reales del diseño anterior:
+   1) El punto de corte "modo móvil" era solo el ancho (<=900px). Un iPad en
+      horizontal (1024px) quedaba clasificado como "escritorio": sidebar fija
+      de 255px, botones sin tamaño mínimo táctil, 4 columnas apretadas. Ahora
+      se usa @media(hover:none)+(pointer:coarse) para detectar TÁCTIL de
+      verdad, sin importar el ancho, y un rango intermedio de tablet entre
+      901-1180px para que no se vea "apretado".
+   2) Las tablas en celular obligaban a un scroll horizontal "a ciegas": al
+      deslizar, se perdía de vista a qué fila correspondía cada celda. Ahora
+      la primera columna queda fija (sticky) y aparece un degradado sutil
+      indicando que hay más contenido hacia la derecha.
+   3) El calendario (FullCalendar) siempre abría en vista de mes completo,
+      ilegible en un celular angosto. En pantallas chicas abre en lista
+      semanal y cambia de vista sola si se rota el dispositivo.
+   ============================================================================ */
+
+/* --- 1) Objetivos táctiles reales (iPad incluido, sin importar el ancho) --- */
+@media (hover:none) and (pointer:coarse){
+  button,.btn{min-height:44px}
+  .nav a{min-height:44px}
+  .mtab{min-height:48px}
+  .badge.paid,.badge.unpaid{min-height:34px;display:inline-flex;align-items:center}
+  .notifBell,.miniCalNav,.userAvatarWrap{min-width:44px;min-height:44px}
+  .miniCalDay{padding:9px 0}
+  input,select,textarea{font-size:16px}
+  a,button,[onclick]{-webkit-tap-highlight-color:rgba(31,74,104,.12)}
+}
+
+/* --- 2) Tablet: iPad en vertical u horizontal, sin caer en modo celular --- */
+@media (min-width:901px) and (max-width:1180px){
+  .sidebar{width:220px}
+  .content{margin-left:220px!important;width:calc(100% - 220px)!important}
+  .userTop,#visualStatusStrip{margin-left:220px!important;width:calc(100% - 220px)!important}
+  .kpirow{grid-template-columns:repeat(2,1fr)!important}
+  .grid4{grid-template-columns:repeat(2,1fr)}
+  .calendarGrid{grid-template-columns:1fr}
+  .sidebarTip{display:none}
+  .formgrid{grid-template-columns:repeat(2,1fr)}
+}
+
+/* --- 3) Tablas: columna fija + pista visual de que hay más a la derecha --- */
+@media (max-width:900px){
+  .tablewrap{position:relative}
+  .tablewrap::after{content:'';position:absolute;top:0;right:0;bottom:0;width:22px;background:linear-gradient(90deg,transparent,rgba(20,40,60,.10));pointer-events:none}
+  .tablewrap table th:first-child,.tablewrap table td:first-child{position:sticky;left:0;background:#fff;box-shadow:2px 0 6px rgba(20,40,60,.06);z-index:1}
+  table{min-width:640px}
+}
+
+/* --- Modal: indicador visual de "hoja deslizable" (patrón iOS/Android) --- */
+@media (max-width:900px){
+  .modalbox{position:relative;padding-top:28px!important}
+  .modalbox::before{content:'';position:absolute;top:10px;left:50%;transform:translateX(-50%);width:38px;height:4px;border-radius:99px;background:#d8e0e8}
+}
+
+/* --- Entrada un poco más dinámica para las tarjetas del Dashboard --- */
+.kpirow .kpi,.grid4 .metric{animation:fadeUp .35s ease both}
+.kpirow .kpi:nth-child(2),.grid4 .metric:nth-child(2){animation-delay:.03s}
+.kpirow .kpi:nth-child(3),.grid4 .metric:nth-child(3){animation-delay:.06s}
+.kpirow .kpi:nth-child(4),.grid4 .metric:nth-child(4){animation-delay:.09s}
