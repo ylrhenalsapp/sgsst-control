@@ -574,7 +574,7 @@ function renderDashboard() {
     const status = taskStatus(s.id, t.id), completed = status === 'Completada';
     const totalH = taskHours(s.id, t.id), monthH = taskMonthHours(s.id, t.id, m);
     const btn = completed ? completedActivityButton(s.id, t.id)
-      : `<button class="secondary" data-requires-write onclick="openActivityModal('${t.id}')">Registrar horas / actualizar</button>`;
+      : `<button class="secondary" data-requires-write onclick="openActivityModal('${t.id}')">Registrar horas / actualizar</button> <button class="secondary" data-requires-write onclick="markActivityCompleted('${s.id}','${t.id}')">✓ Marcar como completada</button>`;
     return `<div class="activity">
       <div class="activityTop">
         <div class="activityIcon ${actColor(i)}">${actIcon(i)}</div>
@@ -653,7 +653,7 @@ function renderActivities() {
       <div class="activityTop">
         <div class="activityIcon ${actColor(i)}">${actIcon(i)}</div>
         <div><h3>${t.name}</h3><div class="small">${completed ? 'Actividad completada. Puedes corregir sus horas mientras el mes no esté cerrado.' : 'Sin cierre todavía.'}</div></div>
-        <div>${completed ? completedActivityButton(s.id, t.id) : `<button class="secondary" data-requires-write onclick="openActivityModal('${t.id}')">Registrar horas</button>`}</div>
+        <div>${completed ? completedActivityButton(s.id, t.id) : `<button class="secondary" data-requires-write onclick="openActivityModal('${t.id}')">Registrar horas</button> <button class="secondary" data-requires-write onclick="markActivityCompleted('${s.id}','${t.id}')">✓ Marcar como completada</button>`}</div>
       </div>
       <div class="small" style="margin:8px 0"><b>${totalH} h acumuladas</b> · ${monthH} h en el mes seleccionado</div>
       ${activityProgressBar(s.id, t.id, totalH)}
@@ -691,12 +691,16 @@ function renderActivitiesAll() {
 // volver a guardar); si el mes ya está cerrado, se informa que está
 // bloqueada en vez de ofrecer un botón que fallaría al guardar.
 function completedActivityButton(siteId, activityId) {
+  // 2026-10-14: toda actividad completada ahora también ofrece "Reabrir",
+  // sin importar si el mes de su último registro está cerrado o si nunca
+  // tuvo horas (se pudo completar directamente con el nuevo botón dedicado).
+  const reopenBtn = `<button class="secondary" data-requires-write onclick="reopenActivity('${siteId}','${activityId}')">↺ Reabrir actividad</button>`;
   const latest = latestHourRecordForActivity(siteId, activityId);
-  if (!latest) return `<button class="secondary" disabled style="opacity:.55;cursor:not-allowed">✓ Completada</button>`;
+  if (!latest) return `<span class="badge done">✓ Completada</span> ${reopenBtn}`;
   if (monthClosed(siteId, monthOf(latest.record_date))) {
-    return `<span class="badge done" title="El mes de este registro ya está cerrado">🔒 Completada (mes cerrado)</span>`;
+    return `<span class="badge done" title="El mes de este registro ya está cerrado">🔒 Completada (mes cerrado)</span> ${reopenBtn}`;
   }
-  return `<button class="secondary" data-requires-write onclick="editHours('${latest.id}')">✏️ Editar horas</button>`;
+  return `<button class="secondary" data-requires-write onclick="editHours('${latest.id}')">✏️ Editar horas</button> ${reopenBtn}`;
 }
 
 function renderHours() {
@@ -969,10 +973,12 @@ async function saveHours() {
   if (!wasEditing) {
     const { data: bagData } = await sb.rpc('get_bag_summary', { p_site_id: s.id, p_month: `${m}-01` });
     const available = (bagData && bagData[0]?.remaining) || 0;
+    // La bolsa de horas es informativa/alerta: si no alcanza, se avisa pero
+    // YA NO se bloquea el registro (antes impedía guardar y mandaba directo
+    // a "agregar horas adicionales"). Registrar horas y cerrar una actividad
+    // ya no dependen del saldo de la bolsa — 2026-10-14.
     if (h > available) {
-      toast(`Para ${m} solo quedan ${available} h en la bolsa. Puedes agregar horas adicionales al mes.`);
-      closeModal('hoursModal'); openAdditionalHoursModal(c.id, s.id, m);
-      return;
+      toast(`Atención: para ${m} la bolsa solo tenía ${available} h disponibles; este registro la deja en negativo. Puedes ampliarla desde "+ Horas adicionales" si quieres que el saldo quede en positivo.`, 4500);
     }
   }
   const status = $('hStatus').value;
@@ -1097,7 +1103,9 @@ async function saveActivity() {
   if (hours > 0) {
     const { data: bagData } = await sb.rpc('get_bag_summary', { p_site_id: s.id, p_month: `${m}-01` });
     const available = (bagData && bagData[0]?.remaining) || 0;
-    if (hours > available) { toast(`Para ${m} solo quedan ${available} h en la bolsa. Debes agregar horas adicionales para continuar.`); closeModal('activityModal'); openAdditionalHoursModal(c.id, s.id, m); return; }
+    // La bolsa es informativa: si no alcanza, se avisa pero ya no bloquea el
+    // avance ni el cierre de la actividad — 2026-10-14.
+    if (hours > available) toast(`Atención: para ${m} la bolsa solo tenía ${available} h disponibles; este avance la deja en negativo.`, 4500);
     // hour_records.status solo admite 'En proceso' / 'Completado' (igual que
     // el otro flujo de registro de horas) — 'Pendiente' es un estado válido
     // para la actividad en sí (sin horas), pero nunca para un registro de
@@ -1117,7 +1125,44 @@ async function saveActivity() {
     if (error) return toast('No se pudo guardar: ' + error.message);
   }
   closeModal('activityModal'); await refreshAll();
-  toast(status === 'Completado' ? (hours > 0 ? `Se registraron ${hours} h y la actividad quedó completada.` : 'Actividad completada y bloqueada.') : `Se registraron ${hours} h. La actividad sigue abierta para nuevos días.`);
+  toast(status === 'Completado' ? (hours > 0 ? `Se registraron ${hours} h y la actividad quedó completada.` : 'Actividad completada.') : `Se registraron ${hours} h. La actividad sigue abierta para nuevos días.`);
+}
+
+// ---------------------------------------------------------------------------
+// Completar / reabrir actividad de forma independiente — 2026-10-14.
+// Antes, la única forma de cerrar una actividad era eligiendo "Completado"
+// dentro de "Registrar horas" o "Registrar avance", lo cual quedaba atado a
+// que la bolsa del mes tuviera saldo (si no alcanzaba, el guardado completo
+// se bloqueaba). Estas dos funciones son una acción directa, independiente
+// de la bolsa: solo insertan en activity_status_history (igual que el resto
+// de la app), sin tocar hour_records ni consultar get_bag_summary.
+// "Reabrir" no necesita ninguna migración nueva: el estado "actual" de una
+// actividad siempre es el último registro de su historial, así que agregar
+// una fila 'En proceso' después de 'Completada' ya reabre la actividad con
+// las mismas reglas (RLS) que ya existían.
+// ---------------------------------------------------------------------------
+async function markActivityCompleted(siteId, activityId) {
+  if (!confirm(`¿Marcar "${taskName(activityId)}" como completada? No hace falta que la bolsa de horas tenga saldo. Podrás reabrirla después si te equivocas.`)) return;
+  const { error } = await sb.from('activity_status_history').insert({
+    site_id: siteId, activity_id: activityId, status: 'Completada',
+    notes: 'Marcada manualmente como completada (sin pasar por registro de horas).', changed_by: currentProfile?.id,
+  });
+  if (error) return toast('No se pudo marcar como completada: ' + error.message);
+  logActivity('activity_completed', `Se marcó "${taskName(activityId)}" como completada manualmente.`, { siteId });
+  await refreshAll();
+  toast('Actividad marcada como completada.');
+}
+
+async function reopenActivity(siteId, activityId) {
+  if (!confirm(`¿Reabrir "${taskName(activityId)}"? Volverá a admitir registro de horas.`)) return;
+  const { error } = await sb.from('activity_status_history').insert({
+    site_id: siteId, activity_id: activityId, status: 'En proceso',
+    notes: 'Reabierta manualmente.', changed_by: currentProfile?.id,
+  });
+  if (error) return toast('No se pudo reabrir la actividad: ' + error.message);
+  logActivity('activity_reopened', `Se reabrió "${taskName(activityId)}".`, { siteId });
+  await refreshAll();
+  toast('Actividad reabierta. Ya admite horas nuevas.');
 }
 
 // ---------------------------------------------------------------------------
