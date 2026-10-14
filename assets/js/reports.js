@@ -24,12 +24,32 @@ function invoiceInitials(name, len = 4) {
   return clean.slice(0, len) || 'GEN';
 }
 
+// Repuebla #reportProvider según el tipo de informe: "Informe por
+// proveedor" solo admite proveedores reales (así lo esperaba ya ese
+// informe); "Cuenta de cobro" (migración 0020) admite también empresas sin
+// proveedor asignado, tratadas como su propio proveedor de una sola
+// empresa. Conserva la selección actual si sigue siendo válida.
+function populateReportProviderSelect(scope) {
+  const sel = $('reportProvider');
+  if (!sel) return;
+  const prev = sel.value;
+  const options = scope === 'invoice' ? listBillingTargets().map(t => ({ value: billingTargetValue(t), label: t.name }))
+    : state.providers.map(p => ({ value: p.id, label: p.name }));
+  sel.innerHTML = options.length
+    ? options.map(o => `<option value="${o.value}">${o.label}</option>`).join('')
+    : '<option value="">(sin proveedores creados)</option>';
+  if (options.some(o => o.value === prev)) sel.value = prev;
+}
+
 function generateReport() {
   const scopeSel = $('reportScope')?.value || 'monthly';
   // El selector de proveedor se usa tanto para el "Informe por proveedor"
   // como para la "Cuenta de cobro" — se muestra/oculta según el tipo de
   // informe elegido.
   if ($('reportProviderWrap')) $('reportProviderWrap').style.display = (scopeSel === 'provider' || scopeSel === 'invoice') ? 'block' : 'none';
+  if ($('reportBillingPeriodWrap')) $('reportBillingPeriodWrap').style.display = scopeSel === 'invoice' ? 'block' : 'none';
+  if (scopeSel === 'provider' || scopeSel === 'invoice') populateReportProviderSelect(scopeSel);
+  if (scopeSel === 'invoice') { populateReportBillingPeriods().then(() => renderInvoiceReport()); return null; }
   if (scopeSel === 'all') { renderGlobalReport(); return null; }
   if (scopeSel === 'provider') { renderProviderReport(); return null; }
   if (scopeSel === 'invoice') { renderInvoiceReport(); return null; }
@@ -358,63 +378,98 @@ async function renderProviderReport() {
 // encabezado se llena solo con los datos de facturación del proveedor
 // (Configuración → Proveedores) y los datos fijos de Yasbleidis
 // (Configuración → Mis datos).
+// ---------------------------------------------------------------------------
+// Cuenta de cobro (migración 0020): ya NO se calcula "por rango de fecha
+// libre sobre hour_records" (que no tenía ningún control y permitía
+// facturar dos veces el mismo registro). Ahora es, literalmente, la vista
+// de un cierre (billing_periods) ya cerrado desde "Cerrar horas": sus
+// totales salen de sumar exactamente los hour_records que quedaron en
+// billing_period_items de ese cierre. El selector de proveedor admite
+// también empresas sin proveedor asignado (su "proveedor" es ella misma —
+// ver listBillingTargets() en app.js).
+// ---------------------------------------------------------------------------
+
+// Refresca el selector de cierres (#reportBillingPeriod) para el proveedor/
+// empresa elegido en #reportProvider. Se llama cada vez que cambia esa
+// selección mientras el tipo de informe es "invoice".
+async function populateReportBillingPeriods() {
+  const sel = $('reportBillingPeriod');
+  if (!sel) return;
+  const target = parseBillingTargetValue($('reportProvider')?.value || '');
+  if (!target) { sel.innerHTML = '<option value="">(selecciona un proveedor)</option>'; return; }
+  let query = sb.from('billing_periods').select('id,date_from,date_to').order('date_to', { ascending: false });
+  query = target.type === 'provider' ? query.eq('provider_id', target.id) : query.eq('company_id', target.id);
+  const { data: periods } = await query;
+  sel.innerHTML = (periods || []).length
+    ? periods.map(p => `<option value="${p.id}">${p.date_from} a ${p.date_to}</option>`).join('')
+    : '<option value="">(sin cierres todavía)</option>';
+}
+
 async function renderInvoiceReport() {
   const box = $('reportBox');
-  if (!state.providers.length) {
-    if (box) box.innerHTML = '<p class="empty">Todavía no hay proveedores creados. Ve a Configuración → Proveedores para agregar uno.</p>';
+  const targets = listBillingTargets();
+  if (!targets.length) {
+    if (box) box.innerHTML = '<p class="empty">Todavía no hay proveedores ni empresas para facturar. Ve a Configuración → Proveedores/Empresas.</p>';
     lastReport = null;
     return null;
   }
-  const providerId = $('reportProvider')?.value || '';
-  if (!providerId) {
-    if (box) box.innerHTML = '<p class="empty">Selecciona un proveedor para generar su cuenta de cobro.</p>';
+  const targetValue = $('reportProvider')?.value || '';
+  const target = parseBillingTargetValue(targetValue);
+  if (!target) {
+    if (box) box.innerHTML = '<p class="empty">Selecciona un proveedor (o empresa) para generar su cuenta de cobro.</p>';
     lastReport = null;
     return null;
   }
-  const provider = state.providers.find(p => p.id === providerId) || {};
-  const providerName = provider.name || 'Proveedor';
-  const providerCompanies = state.companies.filter(c => c.provider_id === providerId);
-  if (!providerCompanies.length) {
-    if (box) box.innerHTML = `<p class="empty">Todavía no hay empresas asignadas al proveedor "${providerName}". Asígnalas desde Configuración → Empresas.</p>`;
+  const periodId = $('reportBillingPeriod')?.value || '';
+  if (!periodId) {
+    if (box) box.innerHTML = '<p class="empty">Este proveedor todavía no tiene ningún cierre de horas. Cierra un periodo primero desde Registro de horas → "Cerrar horas".</p>';
     lastReport = null;
     return null;
   }
+  const provider = target.type === 'provider' ? (state.providers.find(p => p.id === target.id) || {}) : {};
+  const providerName = target.type === 'provider'
+    ? (provider.name || 'Proveedor')
+    : (state.companies.find(c => c.id === target.id)?.name || 'Proveedor');
+
   if (box) box.innerHTML = '<p class="empty">Generando cuenta de cobro, un momento…</p>';
   toast('Generando cuenta de cobro…');
   try {
-    const m = $('reportMonth')?.value || selectedMonth();
-    const [y, mm] = m.split('-').map(Number);
-    const nextMonth = `${new Date(y, mm, 1).toISOString().slice(0, 7)}-01`;
-    const companyIds = new Set(providerCompanies.map(c => c.id));
-    const companyName = id => state.companies.find(c => c.id === id)?.name || '—';
-    // La cuenta de cobro se pidió explícitamente que SIEMPRE muestre la
-    // tarifa REAL/actual del proveedor (Configuración → Proveedores/Tarifas),
-    // sin importar qué tarifa haya quedado guardada en cada hour_records al
-    // momento de registrarlo, y sin importar si ese registro ya está
-    // "Pagado" o no. Por eso aquí NO se usa x.rate (la foto fija histórica)
-    // sino que se recalcula con companyRate(c) en el momento de generar el
-    // documento — así, si Yasbleidis actualiza la tarifa de un proveedor,
-    // la próxima vez que abra o regenere la cuenta de cobro (de cualquier
-    // mes, incluso uno ya facturado) sale con el precio real de hoy.
-    const currentRateFor = companyId => companyRate(state.companies.find(c => c.id === companyId));
-
-    const { data: hoursRows } = await sb.from('hour_records').select('*').gte('record_date', `${m}-01`).lt('record_date', nextMonth);
-    // Viáticos (migración 0012): "a prueba de fallos" — si todavía no se
-    // corrió esa migración, la sección simplemente sale vacía.
-    let expenseRows = [];
+    const { data: period, error: periodErr } = await sb.from('billing_periods').select('*').eq('id', periodId).single();
+    if (periodErr || !period) {
+      if (box) box.innerHTML = '<p class="empty">No se encontró ese cierre. Actualiza la página e intenta de nuevo.</p>';
+      lastReport = null;
+      return null;
+    }
+    const { data: items } = await sb.from('billing_period_items').select('hour_record_id').eq('billing_period_id', periodId);
+    const hourIds = (items || []).map(i => i.hour_record_id);
+    let actRows = [];
+    if (hourIds.length) {
+      const { data: hrs } = await sb.from('hour_records').select('*').in('id', hourIds);
+      actRows = (hrs || []).sort((a, b) => a.record_date.localeCompare(b.record_date));
+    }
+    // Viáticos (migración 0012): por el rango de fechas del cierre. No
+    // llevan control de doble facturación (eso solo aplica a horas de
+    // actividades, que es lo que puede duplicarse entre periodos) — "a
+    // prueba de fallos" si todavía no se corrió esa migración.
+    let expRows = [];
     try {
-      const { data } = await sb.from('expenses').select('*').gte('record_date', `${m}-01`).lt('record_date', nextMonth);
-      expenseRows = data || [];
-    } catch (e) { expenseRows = []; }
+      const targetCompanyIds = new Set(companiesForBillingTarget(target).map(c => c.id));
+      const { data: exps } = await sb.from('expenses').select('*').gte('record_date', period.date_from).lte('record_date', period.date_to);
+      expRows = (exps || []).filter(x => targetCompanyIds.has(x.company_id)).sort((a, b) => a.record_date.localeCompare(b.record_date));
+    } catch (e) { expRows = []; }
 
-    const actRows = (hoursRows || []).filter(x => companyIds.has(x.company_id)).sort((a, b) => a.record_date.localeCompare(b.record_date));
-    const expRows = expenseRows.filter(x => companyIds.has(x.company_id)).sort((a, b) => a.record_date.localeCompare(b.record_date));
+    const companyName = id => state.companies.find(c => c.id === id)?.name || '—';
+    // Igual que antes: la cuenta de cobro siempre muestra la tarifa
+    // REAL/actual (Configuración → Proveedores/Tarifas) al momento de
+    // generarla, sin importar la tarifa congelada en cada hour_records.
+    const currentRateFor = companyId => companyRate(state.companies.find(c => c.id === companyId));
 
     const genDate = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
     const actTotal = actRows.reduce((a, x) => a + Number(x.hours) * currentRateFor(x.company_id), 0);
     const expTotal = expRows.reduce((a, x) => a + Number(x.amount), 0);
     const grandTotal = actTotal + expTotal;
     const adv = state.advisorProfile || {};
+    const periodLabel = `${period.date_from} a ${period.date_to}`;
 
     // Solo se muestran los campos que realmente tienen dato cargado — un
     // documento formal no debe mostrar guiones ni inventar información que
@@ -434,6 +489,10 @@ async function renderInvoiceReport() {
       ['Actividad económica', adv.actividad_economica],
     ].map(([l, v]) => infoRow(l, v)).filter(Boolean).join('');
 
+    // Para una empresa sin proveedor (pseudo-proveedor = ella misma) no hay
+    // fila en "providers" con NIT/gerente/etc. — se muestra solo lo que
+    // realmente existe (el nombre de la empresa), igual que para cualquier
+    // otro dato sin cargar.
     const clienteRows = [
       ['Razón social', providerName],
       ['NIT', provider.nit],
@@ -452,10 +511,13 @@ async function renderInvoiceReport() {
     ].map(([l, v]) => infoRow(l, v)).filter(Boolean).join('');
 
     // Número de la cuenta de cobro: PROVEEDOR-EMPRESA-FECHA-CONSECUTIVO.
-    // El consecutivo es global y solo se asigna una vez por proveedor+mes
-    // (migración 0017) — reabrir/reexportar la misma cuenta de cobro
-    // conserva el mismo número. Si la migración todavía no se corrió, se
-    // deja "[PENDIENTE]" en vez de inventar un número.
+    // El consecutivo es global (migración 0017). Ahora que el periodo ya no
+    // es "YYYY-MM" sino un cierre libre, se usa el id del propio
+    // billing_period como clave de "period" — es único por construcción y
+    // estable (reabrir el mismo cierre siempre da el mismo número), y
+    // funciona igual para proveedores reales y para empresas sin proveedor
+    // (en ese caso se manda provider_id = null, cosa que la función ya
+    // soportaba desde la migración 0017).
     const billedCompanyNames = Array.from(new Set([...actRows, ...expRows].map(x => companyName(x.company_id)).filter(Boolean)));
     const empresaCode = billedCompanyNames.length === 0 ? 'GEN'
       : billedCompanyNames.length === 1 ? invoiceInitials(billedCompanyNames[0])
@@ -466,7 +528,7 @@ async function renderInvoiceReport() {
     let invoiceNumber = null;
     try {
       const { data: numData, error: numErr } = await sb.rpc('get_or_create_invoice_number', {
-        p_provider_id: providerId, p_period: m, p_code_prefix: invoiceCodePrefix,
+        p_provider_id: target.type === 'provider' ? target.id : null, p_period: periodId, p_code_prefix: invoiceCodePrefix,
       });
       if (!numErr && numData) invoiceNumber = numData;
     } catch (e) { invoiceNumber = null; }
@@ -476,7 +538,7 @@ async function renderInvoiceReport() {
       <img src="${REPORT_LOGO_B64}" alt="SST Asesorías y Consultorías" class="invoiceLogo">
       <div class="invoiceHeaderMeta">
         <span class="invoiceNumber">No. ${invoiceNumber || '[PENDIENTE]'}</span>
-        <span class="invoiceMetaLine">Periodo: ${monthLabel(m)}</span>
+        <span class="invoiceMetaLine">Periodo: ${periodLabel}</span>
         <span class="invoiceMetaLine">Fecha de generación: ${genDate}</span>
       </div>
     </div>
@@ -494,11 +556,11 @@ async function renderInvoiceReport() {
     </div>
 
     <div class="reportSectionTitle">Concepto del servicio</div>
-    <p class="invoiceConcept">Relación de actividades mensuales de Seguridad y Salud en el Trabajo (SG-SST) ejecutadas para ${providerName}, correspondientes al periodo ${monthLabel(m)}.</p>
+    <p class="invoiceConcept">Relación de actividades de Seguridad y Salud en el Trabajo (SG-SST) ejecutadas para ${providerName}, correspondientes al periodo ${periodLabel}.</p>
 
     <div class="reportSectionTitle" style="margin-top:22px">Detalle — Actividades realizadas</div>
     <div class="tablewrap"><table><thead><tr><th>No.</th><th>Fecha</th><th>Empresa</th><th>Descripción</th><th>Cantidad</th><th>Valor unitario</th><th>Valor total</th></tr></thead><tbody>
-      ${actRows.length ? actRows.map((x, i) => { const r = currentRateFor(x.company_id); return `<tr><td>${i + 1}</td><td>${x.record_date}</td><td>${companyName(x.company_id)}</td><td>${taskName(x.activity_id)}${x.notes ? ' · ' + x.notes : ''}</td><td>${x.hours} h</td><td>${money(r)}</td><td>${money(x.hours * r)}</td></tr>`; }).join('') : '<tr><td colspan="7" class="empty">Sin actividades registradas en este periodo.</td></tr>'}
+      ${actRows.length ? actRows.map((x, i) => { const r = currentRateFor(x.company_id); return `<tr><td>${i + 1}</td><td>${x.record_date}</td><td>${companyName(x.company_id)}</td><td>${taskName(x.activity_id)}${x.notes ? ' · ' + x.notes : ''}</td><td>${x.hours} h</td><td>${money(r)}</td><td>${money(x.hours * r)}</td></tr>`; }).join('') : '<tr><td colspan="7" class="empty">Sin actividades facturadas en este cierre.</td></tr>'}
       <tr style="font-weight:800;background:#f4f7fa"><td colspan="6">Subtotal actividades</td><td>${money(actTotal)}</td></tr>
     </tbody></table></div>
 
@@ -549,7 +611,12 @@ async function renderInvoiceReport() {
     </div>
     `;
     toast('Cuenta de cobro generada');
-    lastReport = { scope: 'invoice', providerId, providerName, m, actRows, expRows, actTotal, expTotal, grandTotal, genDate, invoiceNumber, title: `Cuenta de cobro · ${providerName}` };
+    const fileToken = `${period.date_from}_${period.date_to}`;
+    lastReport = {
+      scope: 'invoice', targetValue, periodId, providerName, m: fileToken, periodLabel,
+      actRows, expRows, actTotal, expTotal, grandTotal, genDate, invoiceNumber,
+      title: `Cuenta de cobro · ${providerName}`,
+    };
     return lastReport;
   } catch (err) {
     console.error('Error generando la cuenta de cobro:', err);
@@ -572,8 +639,8 @@ async function ensureReport() {
     return (lastReport && lastReport.scope === 'provider' && lastReport.providerId === providerId) ? lastReport : await renderProviderReport();
   }
   if (scope === 'invoice') {
-    const providerId = $('reportProvider')?.value || '';
-    return (lastReport && lastReport.scope === 'invoice' && lastReport.providerId === providerId) ? lastReport : await renderInvoiceReport();
+    const targetValue = $('reportProvider')?.value || '', periodId = $('reportBillingPeriod')?.value || '';
+    return (lastReport && lastReport.scope === 'invoice' && lastReport.targetValue === targetValue && lastReport.periodId === periodId) ? lastReport : await renderInvoiceReport();
   }
   return (lastReport && (lastReport.scope === 'monthly' || lastReport.scope === 'global')) ? lastReport : generateReport();
 }
@@ -618,7 +685,7 @@ async function prepareEmail() {
     const subject = encodeURIComponent(`Cuenta de cobro SG-SST – ${r.providerName} – ${r.m}`);
     const body = encodeURIComponent(
       `Cordial saludo,\n\n` +
-      `Adjunto la cuenta de cobro correspondiente a las actividades ejecutadas para ${r.providerName} durante ${monthLabel(r.m)}.\n\n` +
+      `Adjunto la cuenta de cobro correspondiente a las actividades ejecutadas para ${r.providerName} durante el periodo ${r.periodLabel}.\n\n` +
       `Total actividades: ${money(r.actTotal)}\n` +
       `Total desplazamiento y representación: ${money(r.expTotal)}\n` +
       `TOTAL A COBRAR: ${money(r.grandTotal)}\n\n` +
