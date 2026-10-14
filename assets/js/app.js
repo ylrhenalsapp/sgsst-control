@@ -85,7 +85,8 @@ let state = {
   providers: [], // [{id,name,nit,gerente,direccion,ciudad,telefono,email_radicacion}] catálogo de proveedores (ARL, etc.) — una empresa puede no tener proveedor asignado
   advisorProfile: null, // datos fijos de Yasbleidis (cédula, profesión, cuenta bancaria...) para la Cuenta de cobro
   expensesSite: [], // viáticos/gastos de desplazamiento de la sede seleccionada (todas las fechas)
-  closedMonths: new Set(), // `${siteId}|${'YYYY-MM'}` -> mes cerrado (no admite horas nuevas ni edición)
+  billedHourRecordIds: new Set(), // ids de hour_records que ya quedaron dentro de un cierre (migración 0020) — no se pueden editar ni eliminar
+  billedActivityMap: {}, // `${siteId}|${activityId}` -> {date_from,date_to,hours} del cierre más reciente que facturó algo de esa actividad
   bag: { assigned: 0, additional: 0, carry: 0, total: 0, used: 0, remaining: 0 },
   bagExists: false,
   activityLog: [], // bitácora de acciones relevantes (empresas creadas, actividades cargadas, horas registradas)
@@ -128,7 +129,12 @@ function activitiesForSite(siteId) {
   const ids = new Set(state.siteActivities.filter(sa => sa.site_id === siteId).map(sa => sa.activity_id));
   return state.activities.filter(a => ids.has(a.id));
 }
-function monthClosed(siteId, month) { return state.closedMonths.has(`${siteId}|${month}`); }
+function isHourRecordBilled(id) { return state.billedHourRecordIds && state.billedHourRecordIds.has(id); }
+// Último cierre (si existe) que ya facturó horas de esta actividad en esta
+// sede — null si nunca se ha facturado nada de ella.
+function billedActivityInfo(siteId, activityId) {
+  return (state.billedActivityMap && state.billedActivityMap[`${siteId}|${activityId}`]) || null;
+}
 
 // ---------------------------------------------------------------------------
 // Resumen general (todas las empresas/sedes juntas, no solo la seleccionada).
@@ -358,8 +364,9 @@ async function refreshAll() {
   refreshActivityLog();
   if ($('reportMonth') && !$('reportMonth').value) $('reportMonth').value = selectedMonth();
 
-  // Estado (statusMap), metas (targetsMap) y cierres de mes (closedMonths)
-  // se cargan de TODAS las sedes de TODAS las empresas (no solo la
+  // Estado (statusMap), metas (targetsMap) y facturación por proveedor
+  // (billedHourRecordIds/billedActivityMap) se cargan de TODAS las sedes de
+  // TODAS las empresas (no solo la
   // seleccionada arriba): son tablas chicas, y cargarlas completas es lo
   // que permite que "Ver todas las empresas" (Horas/Actividades) y el
   // resumen general del Dashboard muestren el estado real de cualquier
@@ -367,16 +374,28 @@ async function refreshAll() {
   // sigue cargándose solo de la sede seleccionada por defecto — esa sí
   // puede crecer mucho — y solo se trae completa (allHoursRows) cuando se
   // activa alguno de los botones "Ver todas las empresas".
-  const [{ data: statusRowsAll }, { data: targetRowsAll }, { data: closedRowsAll }] = await Promise.all([
+  const [{ data: statusRowsAll }, { data: targetRowsAll }, { data: billedItemsAll }, { data: billedActivityAll }] = await Promise.all([
     sb.from('v_activity_current_status').select('*'),
     sb.from('activity_targets').select('site_id,activity_id,target_hours'),
-    sb.from('month_closures').select('site_id,month').is('reopened_at', null),
+    sb.from('billing_period_items').select('hour_record_id'),
+    sb.from('v_billed_activity_periods').select('*'),
   ]);
   state.statusMap = {};
   (statusRowsAll || []).forEach(r => { state.statusMap[`${r.site_id}|${r.activity_id}`] = r.status; });
   state.targetsMap = {};
   (targetRowsAll || []).forEach(r => { state.targetsMap[`${r.site_id}|${r.activity_id}`] = Number(r.target_hours); });
-  state.closedMonths = new Set((closedRowsAll || []).map(r => `${r.site_id}|${r.month.slice(0, 7)}`));
+  // Facturación por proveedor (migración 0020) — "a prueba de fallos": si
+  // todavía no se corrió esa migración, estas dos consultas simplemente
+  // vuelven vacías y nada queda bloqueado por facturación todavía.
+  state.billedHourRecordIds = new Set((billedItemsAll || []).map(r => r.hour_record_id));
+  state.billedActivityMap = {};
+  (billedActivityAll || []).forEach(r => {
+    const key = `${r.site_id}|${r.activity_id}`;
+    const prev = state.billedActivityMap[key];
+    if (!prev || r.date_to > prev.date_to) {
+      state.billedActivityMap[key] = { date_from: r.date_from, date_to: r.date_to, hours: Number(r.hours) };
+    }
+  });
   if (hoursShowAll || activitiesShowAll) {
     const { data: allHours } = await sb.from('hour_records').select('*');
     allHoursRows = allHours || [];
@@ -410,8 +429,9 @@ async function refreshAll() {
     return;
   }
 
-  // statusMap/targetsMap/closedMonths ya se cargaron arriba (todas las
-  // sedes). Aquí solo quedan las consultas propias de la sede seleccionada.
+  // statusMap/targetsMap/billedHourRecordIds/billedActivityMap ya se
+  // cargaron arriba (todas las sedes). Aquí solo quedan las consultas
+  // propias de la sede seleccionada.
   const [{ data: hours }, { data: evid }, { data: cal }, { data: bagRow }, { count }] = await Promise.all([
     sb.from('hour_records').select('*').eq('site_id', s.id),
     sb.from('evidences').select('*').eq('site_id', s.id).order('record_date', { ascending: false }),
@@ -697,8 +717,8 @@ function completedActivityButton(siteId, activityId) {
   const reopenBtn = `<button class="secondary" data-requires-write onclick="reopenActivity('${siteId}','${activityId}')">↺ Reabrir actividad</button>`;
   const latest = latestHourRecordForActivity(siteId, activityId);
   if (!latest) return `<span class="badge done">✓ Completada</span> ${reopenBtn}`;
-  if (monthClosed(siteId, monthOf(latest.record_date))) {
-    return `<span class="badge done" title="El mes de este registro ya está cerrado">🔒 Completada (mes cerrado)</span> ${reopenBtn}`;
+  if (isHourRecordBilled(latest.id)) {
+    return `<span class="badge done" title="Este registro ya fue facturado en un cierre">🔒 Completada (horas facturadas)</span> ${reopenBtn}`;
   }
   return `<button class="secondary" data-requires-write onclick="editHours('${latest.id}')">✏️ Editar horas</button> ${reopenBtn}`;
 }
@@ -726,72 +746,214 @@ function renderHoursRows(sourceRows, showAll) {
   $('hoursTable').innerHTML = rows.length ? rows.map(x => {
     const c = showAll ? state.companies.find(cc => cc.id === x.company_id) : company();
     const st = showAll ? c?.sites.find(ss => ss.id === x.site_id) : s;
-    const closed = monthClosed(x.site_id, monthOf(x.record_date));
-    const editBtn = closed
-      ? `<span class="small" title="El mes de este registro ya está cerrado">🔒 Cerrado</span>`
+    const billed = isHourRecordBilled(x.id);
+    const editBtn = billed
+      ? `<span class="small" title="Este registro ya fue facturado en un cierre">🔒 Facturado</span>`
       : `<button class="secondary" data-requires-write onclick="editHours('${x.id}')">Editar</button>`;
+    const deleteBtn = billed
+      ? ''
+      : `<button class="danger" data-requires-write onclick="deleteItem('hour_records','${x.id}')">Eliminar</button>`;
     // El % de avance es de la ACTIVIDAD completa en esta sede (horas
     // acumuladas de todos sus registros / meta configurada), no solo de
     // este registro puntual — por eso se repite en cada fila de la misma
     // actividad, igual que en Dashboard y Actividades.
     const avance = activityProgressBar(x.site_id, x.activity_id, taskHours(x.site_id, x.activity_id));
-    return `<tr><td>${x.record_date}</td><td>${c?.name || '—'}<br><span class="small">${st?.name || ''}</span></td><td>${taskName(x.activity_id)}</td><td>${avance}</td><td><span class="badge ${x.status === 'Completado' ? 'done' : 'progress'}">${x.status}</span></td><td>${x.hours}</td><td>${money(x.rate)}</td><td>${money(x.hours * x.rate)}</td><td><button class="badge ${x.paid ? 'paid' : 'unpaid'}" data-requires-write onclick="togglePaid('${x.id}',${!x.paid})">${x.paid ? '✓ Pagado' : '⏳ Pendiente'}</button></td><td style="white-space:nowrap">${editBtn} <button class="danger" data-requires-write onclick="deleteItem('hour_records','${x.id}')">Eliminar</button></td></tr>`;
+    return `<tr><td>${x.record_date}</td><td>${c?.name || '—'}<br><span class="small">${st?.name || ''}</span></td><td>${taskName(x.activity_id)}</td><td>${avance}</td><td><span class="badge ${x.status === 'Completado' ? 'done' : 'progress'}">${x.status}</span></td><td>${x.hours}</td><td>${money(x.rate)}</td><td>${money(x.hours * x.rate)}</td><td><button class="badge ${x.paid ? 'paid' : 'unpaid'}" data-requires-write onclick="togglePaid('${x.id}',${!x.paid})">${x.paid ? '✓ Pagado' : '⏳ Pendiente'}</button></td><td style="white-space:nowrap">${editBtn} ${deleteBtn}</td></tr>`;
   }).join('') : `<tr><td colspan="10" class="empty">No hay horas registradas.</td></tr>`;
 }
 
 // ---------------------------------------------------------------------------
-// Cierre mensual manual por sede (banner + acciones). Mientras el mes no se
-// cierre, las horas se pueden seguir editando; una vez cerrado, no se pueden
-// agregar ni editar horas de ese mes (se puede reabrir si hace falta).
+// Cierre de horas por proveedor, con facturación anticipada (migración
+// 0020). Reemplaza, para efectos de facturación, el cierre mensual por sede
+// (month_closures) — ahora el cierre es por PROVEEDOR (o por una empresa sin
+// proveedor asignado, que cuenta como su propio proveedor de una sola
+// empresa) y por un RANGO DE FECHAS LIBRE, no un mes calendario fijo. Las
+// actividades Completada se incluyen siempre; las En proceso quedan a
+// elección (check "incluir en la cuenta de cobro") — lo que no se marca se
+// queda disponible para el siguiente cierre, sin bloquear nada.
 // ---------------------------------------------------------------------------
-const MONTH_NAMES_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+function billingTargetValue(t) { return t.type === 'provider' ? `p:${t.id}` : `c:${t.id}`; }
+function parseBillingTargetValue(v) {
+  if (!v) return null;
+  const i = v.indexOf(':');
+  if (i < 0) return null;
+  const type = v.slice(0, i), id = v.slice(i + 1);
+  if (!id) return null;
+  return { type: type === 'p' ? 'provider' : 'company', id };
+}
+// Proveedores reales + empresas sin proveedor asignado (su "proveedor" es
+// ella misma).
+function listBillingTargets() {
+  const targets = state.providers.map(p => ({ type: 'provider', id: p.id, name: p.name }));
+  state.companies.filter(c => !c.provider_id).forEach(c => targets.push({ type: 'company', id: c.id, name: `${c.name} (sin proveedor)` }));
+  return targets.sort((a, b) => a.name.localeCompare(b.name));
+}
+function companiesForBillingTarget(target) {
+  if (!target) return [];
+  return target.type === 'provider' ? state.companies.filter(c => c.provider_id === target.id) : state.companies.filter(c => c.id === target.id);
+}
 
 function renderMonthCloseBanner() {
   const el = $('monthCloseBanner'); if (!el) return;
-  const s = site(); if (!s) { el.innerHTML = ''; return; }
-  const m = selectedMonth(), now = monthNow();
-  const closed = monthClosed(s.id, m);
-
-  if (m > now) { el.innerHTML = ''; return; } // mes futuro: nada que cerrar todavía
-
-  if (closed) {
-    el.innerHTML = `<div class="monthCloseBanner closedBanner">🔒 <b>Mes ${m} cerrado</b> para ${s.name}. Las horas de este mes ya no se pueden editar ni agregar.
-      <button class="secondary" data-requires-write onclick="reopenMonth()">Reabrir mes</button></div>`;
-    return;
-  }
-
-  if (m === now) {
-    const today_ = new Date();
-    const lastDay = new Date(today_.getFullYear(), today_.getMonth() + 1, 0);
-    const daysLeft = Math.max(0, Math.ceil((lastDay - today_) / 86400000));
-    const lastDayLabel = `${lastDay.getDate()} de ${MONTH_NAMES_ES[lastDay.getMonth()]}`;
-    el.innerHTML = `<div class="monthCloseBanner openBanner">🗓️ Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b> para terminar el mes · <b>Cierre de mes: ${lastDayLabel}</b>. Cierra el mes cuando ya hayas organizado y distribuido todas las horas.
-      <button class="primary" data-requires-write onclick="closeMonth()">Cerrar mes</button></div>`;
-    return;
-  }
-
-  el.innerHTML = `<div class="monthCloseBanner openBanner">⚠️ El mes ${m} ya pasó y todavía no se ha cerrado para ${s.name}.
-    <button class="primary" data-requires-write onclick="closeMonth()">Cerrar mes</button></div>`;
+  if (!listBillingTargets().length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="monthCloseBanner openBanner">📊 Cuando ya hayas organizado y distribuido las horas de un proveedor, cierra su periodo para generar la Cuenta de cobro (puedes incluir actividades En proceso que quieras cobrar por adelantado).
+    <button class="primary" data-requires-write onclick="openBillingCloseModal()">Cerrar horas</button></div>`;
 }
 
-async function closeMonth() {
-  const s = site(); if (!s) return;
-  const m = selectedMonth();
-  if (!confirm(`¿Cerrar el mes ${m} para ${s.name}? Después de cerrarlo no se podrán agregar ni editar horas de ese mes (puedes reabrirlo si necesitas corregir algo).`)) return;
-  const { error } = await sb.from('month_closures').insert({ site_id: s.id, month: `${m}-01`, closed_by: currentProfile?.id });
-  if (error) return toast('No se pudo cerrar el mes: ' + error.message);
-  await refreshAll();
-  toast(`Mes ${m} cerrado para ${s.name}.`);
+async function openBillingCloseModal() {
+  const targets = listBillingTargets();
+  if (!targets.length) return toast('Todavía no hay proveedores ni empresas para cerrar. Ve a Configuración → Proveedores/Empresas.');
+  $('bcTarget').innerHTML = targets.map(t => `<option value="${billingTargetValue(t)}">${t.name}</option>`).join('');
+  $('bcDateTo').value = today();
+  await updateBillingCloseDefaultFrom();
+  openModal('billingCloseModal');
+  await refreshBillingCloseList();
 }
 
-async function reopenMonth() {
-  const s = site(); if (!s) return;
-  const m = selectedMonth();
-  if (!confirm(`¿Reabrir el mes ${m} para ${s.name}? Se podrán volver a editar y agregar horas.`)) return;
-  const { error } = await sb.from('month_closures').update({ reopened_at: new Date().toISOString(), reopened_by: currentProfile?.id }).eq('site_id', s.id).eq('month', `${m}-01`).is('reopened_at', null);
-  if (error) return toast('No se pudo reabrir el mes: ' + error.message);
+async function updateBillingCloseDefaultFrom() {
+  const target = parseBillingTargetValue($('bcTarget')?.value);
+  if (!target) return;
+  let query = sb.from('billing_periods').select('date_to').order('date_to', { ascending: false }).limit(1);
+  query = target.type === 'provider' ? query.eq('provider_id', target.id) : query.eq('company_id', target.id);
+  const { data } = await query;
+  const lastTo = data && data[0] && data[0].date_to;
+  $('bcDateFrom').value = lastTo ? new Date(new Date(lastTo + 'T12:00:00').getTime() + 86400000).toISOString().slice(0, 10) : today();
+}
+
+let billingCloseGroups = { range: [], pending: [] };
+
+function groupHourRecordsByActivity(rows, siteCompany) {
+  const map = new Map();
+  rows.forEach(r => {
+    const key = `${r.site_id}|${r.activity_id}`;
+    if (!map.has(key)) {
+      const c = siteCompany[r.site_id];
+      const s = c ? c.sites.find(x => x.id === r.site_id) : null;
+      map.set(key, {
+        siteId: r.site_id, activityId: r.activity_id,
+        companyName: c ? c.name : '—', siteName: s ? s.name : '—',
+        activityName: taskName(r.activity_id), status: taskStatus(r.site_id, r.activity_id),
+        hours: 0, ids: [],
+      });
+    }
+    const g = map.get(key);
+    g.hours += Number(r.hours);
+    g.ids.push(r.id);
+  });
+  return [...map.values()].sort((a, b) => a.companyName.localeCompare(b.companyName) || a.activityName.localeCompare(b.activityName));
+}
+
+function renderBillingGroupRows(groups) {
+  if (!groups.length) return '';
+  return `<div class="tablewrap"><table><thead><tr><th>Empresa / Sede</th><th>Actividad</th><th>Estado</th><th>Horas</th><th>Incluir</th></tr></thead><tbody>${groups.map(g => {
+    const auto = g.status === 'Completada';
+    return `<tr data-bc-key="${g.siteId}|${g.activityId}" data-bc-ids="${g.ids.join(',')}" data-bc-status="${g.status}">
+      <td>${g.companyName}<br><span class="small">${g.siteName}</span></td>
+      <td>${g.activityName}</td>
+      <td><span class="badge ${auto ? 'done' : 'progress'}">${g.status}</span></td>
+      <td>${g.hours.toFixed(2)} h</td>
+      <td>${auto ? '<span class="small">✓ Se incluye</span>' : `<input type="checkbox" onchange="updateBillingCloseSummary()">`}</td>
+    </tr>`;
+  }).join('')}</tbody></table></div>`;
+}
+
+async function refreshBillingCloseList() {
+  const target = parseBillingTargetValue($('bcTarget')?.value);
+  const listEl = $('bcCurrentList'), pendingEl = $('bcPendingList');
+  if (!target) { if (listEl) listEl.innerHTML = ''; if (pendingEl) pendingEl.innerHTML = ''; updateBillingCloseSummary(); return; }
+  const from = $('bcDateFrom').value, to = $('bcDateTo').value;
+  const companies = companiesForBillingTarget(target);
+  const companyIds = companies.map(c => c.id);
+  const siteCompany = {};
+  companies.forEach(c => (c.sites || []).forEach(s => { siteCompany[s.id] = c; }));
+
+  if (listEl) listEl.innerHTML = '<p class="empty">Buscando actividades…</p>';
+  if (!companyIds.length) { if (listEl) listEl.innerHTML = '<p class="empty">Este proveedor todavía no tiene empresas asignadas.</p>'; if (pendingEl) pendingEl.innerHTML = ''; updateBillingCloseSummary(); return; }
+
+  const { data: rows, error } = await sb.from('hour_records').select('*').in('company_id', companyIds);
+  if (error) { if (listEl) listEl.innerHTML = `<p class="empty">No se pudo cargar: ${error.message}</p>`; return; }
+  const unbilled = (rows || []).filter(r => !isHourRecordBilled(r.id));
+  const inRange = to ? unbilled.filter(r => r.record_date >= from && r.record_date <= to) : [];
+  const pending = from ? unbilled.filter(r => r.record_date < from) : [];
+
+  billingCloseGroups = { range: groupHourRecordsByActivity(inRange, siteCompany), pending: groupHourRecordsByActivity(pending, siteCompany) };
+  if (listEl) listEl.innerHTML = renderBillingGroupRows(billingCloseGroups.range) || '<p class="empty">No hay actividades con horas sin facturar en este rango.</p>';
+  if (pendingEl) pendingEl.innerHTML = billingCloseGroups.pending.length ? renderBillingGroupRows(billingCloseGroups.pending) : '<p class="empty">No hay horas pendientes de periodos anteriores.</p>';
+  updateBillingCloseSummary();
+}
+$('bcTarget')?.addEventListener('change', async () => { await updateBillingCloseDefaultFrom(); await refreshBillingCloseList(); });
+$('bcDateFrom')?.addEventListener('change', refreshBillingCloseList);
+$('bcDateTo')?.addEventListener('change', refreshBillingCloseList);
+
+function collectBillingSelection() {
+  const items = [];
+  document.querySelectorAll('#billingCloseModal tr[data-bc-key]').forEach(tr => {
+    const status = tr.getAttribute('data-bc-status');
+    const ids = tr.getAttribute('data-bc-ids').split(',').filter(Boolean);
+    if (status === 'Completada') {
+      ids.forEach(id => items.push({ hourRecordId: id, includedAs: 'completada' }));
+    } else {
+      const cb = tr.querySelector('input[type="checkbox"]');
+      if (cb && cb.checked) ids.forEach(id => items.push({ hourRecordId: id, includedAs: 'en_proceso_autorizado' }));
+    }
+  });
+  return items;
+}
+
+function updateBillingCloseSummary() {
+  const el = $('bcSummary'); if (!el) return;
+  const items = collectBillingSelection();
+  el.innerHTML = items.length ? `<b>${items.length}</b> registro(s) de horas se incluirán en este cierre.` : 'Todavía no hay ningún registro para incluir en este cierre.';
+}
+
+async function confirmBillingClose() {
+  const target = parseBillingTargetValue($('bcTarget')?.value);
+  if (!target) return toast('Selecciona un proveedor o empresa.');
+  const from = $('bcDateFrom').value, to = $('bcDateTo').value;
+  if (!from || !to || to < from) return toast('Revisa el rango de fechas (desde no puede ser posterior a hasta).');
+  const items = collectBillingSelection();
+  if (!items.length) return toast('No hay ningún registro marcado para incluir en este cierre.');
+  if (!confirm(`¿Cerrar este periodo (${from} a ${to}) con ${items.length} registro(s) de horas? Después de cerrarlo, esos registros no se podrán editar ni eliminar (sí se pueden agregar horas nuevas después, con autorización).`)) return;
+
+  const payload = { date_from: from, date_to: to, closed_by: currentProfile?.id };
+  if (target.type === 'provider') payload.provider_id = target.id; else payload.company_id = target.id;
+  const { data: period, error } = await sb.from('billing_periods').insert(payload).select('id').single();
+  if (error) return toast('No se pudo crear el cierre: ' + error.message);
+
+  const { error: itemsError } = await sb.from('billing_period_items').insert(
+    items.map(it => ({ billing_period_id: period.id, hour_record_id: it.hourRecordId, included_as: it.includedAs }))
+  );
+  if (itemsError) return toast('El cierre se creó pero hubo un error guardando los registros facturados: ' + itemsError.message);
+
+  logActivity('billing_period_closed', `Cierre de horas ${from} a ${to} (${items.length} registro(s)).`, {});
+  closeModal('billingCloseModal');
   await refreshAll();
-  toast(`Mes ${m} reabierto para ${s.name}.`);
+  toast('Cierre creado. Ya puedes generar la Cuenta de cobro desde Informes.');
+}
+
+// ---------------------------------------------------------------------------
+// Aviso de "ya se facturó" (migración 0020): se muestra antes de guardar una
+// hora NUEVA en una actividad que ya tiene horas facturadas en un cierre
+// cerrado. Nunca bloquea — solo informa y pide autorización; lo nuevo nunca
+// se mete en el cierre ya cerrado, queda disponible para el próximo. Si la
+// actividad además está Completada, autorizar también la reabre (si no, el
+// candado de "actividad completada" de la base de datos impediría guardar).
+// ---------------------------------------------------------------------------
+async function authorizeNewHoursIfBilled(siteId, activityId) {
+  const info = billedActivityInfo(siteId, activityId);
+  if (!info) return true;
+  const wasCompleted = taskIsCompleted(siteId, activityId);
+  const reopenNote = wasCompleted
+    ? ' Como la actividad está marcada como Completada, al autorizar también se reabrirá para admitir el nuevo registro.'
+    : '';
+  const ok = confirm(`Se facturaron en el periodo ${info.date_from} a ${info.date_to} (${info.hours} h) de esta actividad.${reopenNote}\n\n¿Deseas agregar más horas? Estas se facturarán en un próximo periodo.\n\nAutorizar`);
+  if (!ok) return false;
+  if (wasCompleted) {
+    const error = await reopenActivityCore(siteId, activityId, 'Reabierta automáticamente al autorizar horas adicionales sobre una actividad ya facturada.');
+    if (error) { toast('No se pudo reabrir la actividad para agregar las horas: ' + error.message); return false; }
+    return 'reopened';
+  }
+  return true;
 }
 
 async function togglePaid(id, value) {
@@ -937,7 +1099,7 @@ function editHours(id) {
   // state.hoursSite (que solo trae la sede actual), sino en allHoursRows.
   const r = state.hoursSite.find(x => x.id === id) || (allHoursRows || []).find(x => x.id === id);
   if (!r) return;
-  if (monthClosed(r.site_id, monthOf(r.record_date))) return toast('Este mes ya está cerrado. Usa "Reabrir mes" en Registro de horas si necesitas corregirlo.');
+  if (isHourRecordBilled(r.id)) return toast('Este registro ya fue facturado en un cierre y no se puede editar. Puedes agregar un registro nuevo en su lugar.');
   editingHourId = id;
   $('hoursModalTitle').textContent = 'Editar horas';
   const c = state.companies.find(x => x.sites.some(s => s.id === r.site_id));
@@ -958,13 +1120,21 @@ async function saveHours() {
   const c = state.companies.find(x => x.id === $('hCompany').value), s = c?.sites.find(x => x.id === $('hSite').value), taskId = $('hTask').value, m = monthOf($('hDate').value);
   if (!s) return toast('Selecciona una sede válida');
   const wasEditing = !!editingHourId;
+  // Si la actividad ya tiene horas facturadas en un cierre (migración
+  // 0020), avisar y pedir autorización antes de seguir — nunca bloquea, y
+  // si la actividad está Completada, autorizar también la reabre (si no,
+  // el candado de más abajo la bloquearía de todos modos).
+  let reopenedNow = false;
+  if (!wasEditing && billedActivityInfo(s.id, taskId)) {
+    const result = await authorizeNewHoursIfBilled(s.id, taskId);
+    if (!result) return;
+    reopenedNow = result === 'reopened';
+  }
   // El bloqueo de "actividad completada" solo aplica a horas NUEVAS. Si ya
   // existía el registro (se abrió con "Editar"), se debe poder corregir sus
-  // horas aunque la actividad haya quedado marcada como Completada — el
-  // único candado real para un registro existente es que el mes de esa
-  // fecha ya esté cerrado (chequeo siguiente).
-  if (!wasEditing && taskIsCompleted(s.id, taskId)) return toast('Esta actividad ya está completada y no admite más horas.');
-  if (monthClosed(s.id, m)) return toast('Ese mes ya está cerrado para esta sede. Reábrelo primero si necesitas cambiar algo.');
+  // horas aunque la actividad haya quedado marcada como Completada. Un
+  // registro ya facturado no se puede editar en absoluto — ver editHours().
+  if (!wasEditing && !reopenedNow && taskIsCompleted(s.id, taskId)) return toast('Esta actividad ya está completada y no admite más horas.');
   // La bolsa de horas (presupuesto mensual) solo se valida al REGISTRAR
   // horas nuevas, que es lo que realmente la consume. Editar un registro ya
   // existente es corregir fecha/horas/actividad de algo que ya se ejecutó —
@@ -1085,7 +1255,14 @@ $('aTask')?.addEventListener('change', refreshActivityModalState);
 async function saveActivity() {
   const c = state.companies.find(x => x.id === $('aCompany').value), s = c?.sites.find(x => x.id === $('aSite').value), tid = $('aTask').value;
   if (!c || !s) return toast('Selecciona una empresa y sede válida.');
-  if (taskIsCompleted(s.id, tid)) return toast('La actividad ya fue completada y no puede modificarse.');
+  if (taskIsCompleted(s.id, tid)) {
+    // Si ya está Completada pero nunca se facturó, sigue aplicando el
+    // bloqueo de siempre. Si YA se facturó, se ofrece autorizar + reabrir
+    // (migración 0020) en vez de bloquear sin más.
+    if (!billedActivityInfo(s.id, tid)) return toast('La actividad ya fue completada y no puede modificarse.');
+    const result = await authorizeNewHoursIfBilled(s.id, tid);
+    if (!result) return;
+  }
   const status = $('aStatus').value, hours = Number($('aHours').value || 0);
   // Fecha del avance: antes se guardaba siempre today() sin mostrarla ni
   // dejar que la persona la cambiara. Ahora es un campo editable en el
@@ -1153,12 +1330,17 @@ async function markActivityCompleted(siteId, activityId) {
   toast('Actividad marcada como completada.');
 }
 
-async function reopenActivity(siteId, activityId) {
-  if (!confirm(`¿Reabrir "${taskName(activityId)}"? Volverá a admitir registro de horas.`)) return;
+async function reopenActivityCore(siteId, activityId, notes) {
   const { error } = await sb.from('activity_status_history').insert({
     site_id: siteId, activity_id: activityId, status: 'En proceso',
-    notes: 'Reabierta manualmente.', changed_by: currentProfile?.id,
+    notes: notes || 'Reabierta manualmente.', changed_by: currentProfile?.id,
   });
+  return error;
+}
+
+async function reopenActivity(siteId, activityId) {
+  if (!confirm(`¿Reabrir "${taskName(activityId)}"? Volverá a admitir registro de horas.`)) return;
+  const error = await reopenActivityCore(siteId, activityId);
   if (error) return toast('No se pudo reabrir la actividad: ' + error.message);
   logActivity('activity_reopened', `Se reabrió "${taskName(activityId)}".`, { siteId });
   await refreshAll();
