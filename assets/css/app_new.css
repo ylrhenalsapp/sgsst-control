@@ -1,0 +1,601 @@
+:root{--nav:#17324d;--accent:#1f9d55;--bg:#f4f7fa;--card:#fff;--text:#1f2937;--muted:#6b7280;--line:#e7edf3;--warn:#d69e2e;--danger:#d64545}
+*{box-sizing:border-box;font-family:Inter,Segoe UI,Arial,sans-serif}body{margin:0;background:var(--bg);color:var(--text)}
+.app{display:flex;min-height:100vh}.sidebar{width:255px;background:var(--nav);color:#fff;padding:22px 14px;position:fixed;top:0;bottom:0;overflow:auto}.brand{font-size:19px;font-weight:800;padding:8px 12px 24px}.brand small{display:block;font-weight:400;opacity:.65;margin-top:6px}.nav a{display:block;color:#d8e4ed;text-decoration:none;padding:13px 14px;border-radius:9px;margin:5px 0;font-size:14px}.nav a:hover,.nav a.active{background:rgba(255,255,255,.12);color:#fff}.content{margin-left:255px;flex:1;padding:28px;max-width:1600px}
+.top{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:22px}.top h1{margin:0;font-size:27px}.top p{margin:6px 0;color:var(--muted)}.filters{display:flex;gap:8px;flex-wrap:wrap}.filters select,.filters input{min-width:150px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}.grid2{display:grid;grid-template-columns:1.7fr 1fr;gap:18px}.card,.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 5px 20px rgba(20,40,60,.04)}.metric .label{font-size:12px;color:var(--muted);text-transform:uppercase}.metric .value{font-size:29px;font-weight:800;margin-top:9px}.metric .sub{font-size:12px;color:var(--muted);margin-top:6px}
+.panel{margin-bottom:18px}.panelhead{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:15px}.panelhead h2{margin:0;font-size:18px}
+button,.btn{border:0;border-radius:8px;padding:10px 14px;cursor:pointer;font-size:13px;text-decoration:none;display:inline-block}.primary{background:var(--nav);color:#fff}.success{background:var(--accent);color:#fff}.secondary{background:#eef3f7;color:#284157}.danger{background:#fff0f0;color:var(--danger)}button:hover,.btn:hover{filter:brightness(.97)}
+table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;padding:11px 8px;border-bottom:1px solid var(--line)}td{padding:12px 8px;border-bottom:1px solid #f0f3f6;vertical-align:top}.badge{padding:5px 9px;border-radius:99px;font-size:11px;font-weight:700;display:inline-block}.done{background:#e9f8ef;color:#17733c}.progress{background:#fff6db;color:#9a6700}.pending{background:#fdecec;color:#b62d2d}
+.activity{border:1px solid var(--line);border-radius:12px;padding:15px;margin-bottom:10px}.activityTop{display:flex;justify-content:space-between;gap:12px}.activity h3{margin:0;font-size:14px}.bar{height:8px;background:#edf1f4;border-radius:10px;margin:11px 0}.fill{height:100%;background:var(--accent);border-radius:10px}.small{font-size:12px;color:var(--muted)}
+.section{display:none}.section.active{display:block}.empty{padding:24px;text-align:center;color:var(--muted)}
+input,select,textarea{width:100%;border:1px solid #dbe3ea;border-radius:8px;padding:10px;background:#fff;font-size:13px}textarea{min-height:85px}.formgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.formgrid .full{grid-column:1/-1}.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:15px;flex-wrap:wrap}
+.link{color:#1769aa;text-decoration:none;font-weight:600}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.tabs button.active{background:var(--nav);color:#fff}
+.modal{display:none;position:fixed;inset:0;background:rgba(10,20,30,.48);z-index:200;padding:20px;align-items:center;justify-content:center}.modal.show{display:flex}.modalbox{width:min(720px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:15px;padding:22px}.modalbox h2{margin-top:0}.toast{position:fixed;right:22px;bottom:22px;background:#17324d;color:#fff;padding:13px 17px;border-radius:10px;display:none;z-index:99}
+.report{background:#f8fafc;border:1px dashed #ccd8e2;border-radius:10px;padding:20px;line-height:1.6}.kpirow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}.kpi{background:#fff;border:1px solid var(--line);padding:12px;border-radius:10px}.kpi b{display:block;font-size:18px}
+@media(max-width:1000px){.grid4{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.sidebar{position:static;width:100%}.app{display:block}.content{margin-left:0}.nav{display:flex;overflow:auto}.nav a{white-space:nowrap}.brand{padding-bottom:10px}}
+@media(max-width:650px){.content{padding:16px}.top{display:block}.grid4,.formgrid,.kpirow{grid-template-columns:1fr}.filters{margin-top:14px}.tablewrap{overflow:auto}}
+
+/* ===== V5 RESPONSIVE + ACCESO ===== */
+:root{--navy:#21374d;--soft:#f5f7fa;--line:#d8e0e8;--green:#2f8a63;--amber:#b98522;--red:#b24c43}
+body{min-width:0}
+.userTop{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 18px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30}
+.userIdentity{display:flex;align-items:center;gap:10px;min-width:0}
+.userAvatar{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--navy);color:#fff;font-weight:800;flex:0 0 auto}
+.userName{font-weight:800;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.userRole{font-size:12px;color:#667}
+.userLoginBadge{font-size:12px;padding:6px 10px;border-radius:999px;background:#e8f4ee;color:#256b4c;font-weight:700}
+.loginOverlay{position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#eef2f6,#fff);display:flex;align-items:center;justify-content:center;padding:20px}
+.loginCard{width:min(520px,100%);background:#fff;border:1px solid var(--line);box-shadow:0 20px 60px rgba(18,35,52,.18);border-radius:24px;padding:30px}
+.loginBrand{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:22px}
+.loginBrand img{width:auto;max-width:280px;height:auto;border-radius:0;border:none}
+.loginCard h1{margin:0 0 8px;color:var(--navy);font-size:28px}
+.loginCard p{margin:0 0 18px;color:#5f6b76}
+.loginHint{font-size:12px;color:#7b8792;margin-top:12px}
+.loginError{display:none;color:#a23d35;background:#fbeceb;border-radius:10px;padding:10px;margin-top:10px;font-size:14px}
+.mobileMenuBtn{display:none}
+@media(max-width:900px){
+  .app{display:block!important}
+  .sidebar{position:fixed;left:0;top:0;bottom:0;width:min(82vw,320px);transform:translateX(-105%);transition:.25s ease;z-index:80;box-shadow:20px 0 50px rgba(0,0,0,.18);overflow:auto}
+  .sidebar.open{transform:translateX(0)}
+  .sidebarBackdrop{display:block;position:fixed;inset:0;background:rgba(0,0,0,.38);z-index:70}
+  .main{width:100%!important;margin:0!important;padding:12px!important}
+  .mobileMenuBtn{display:inline-flex!important;align-items:center;justify-content:center;width:42px;height:42px;border:0;border-radius:10px;background:var(--navy);color:#fff;font-size:21px}
+  .topbar,.panelhead{gap:10px;align-items:flex-start}
+  .topbar{flex-direction:column}
+  .filters{width:100%;display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px}
+  .filters > *{width:100%;min-width:0}
+  .panelhead{flex-wrap:wrap}
+  .panelhead > div{display:flex;gap:8px;flex-wrap:wrap}
+  .kpirow{grid-template-columns:1fr 1fr!important}
+  .formgrid{grid-template-columns:1fr!important}
+  .formgrid .full{grid-column:auto!important}
+  .activity{padding:14px!important}
+  .activityTop{gap:12px}
+  .activityTop h3{font-size:15px}
+  .tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{min-width:760px}
+  .modal{align-items:flex-end!important;padding:0!important}
+  .modalbox{width:100%!important;max-height:92vh!important;border-radius:22px 22px 0 0!important;overflow:auto;padding:18px!important}
+  .actions{position:sticky;bottom:0;background:#fff;padding-top:12px}
+  button{min-height:42px}
+  input,select,textarea{font-size:16px!important}
+}
+@media(max-width:560px){
+  .userTop{padding:8px 12px}
+  .userName{font-size:14px}
+  .userRole{display:none}
+  .userLoginBadge{display:none}
+  .main{padding:8px!important}
+  .filters{grid-template-columns:1fr!important}
+  .kpirow{grid-template-columns:1fr!important}
+  .panel,.activity{border-radius:14px!important}
+  .panel{padding:14px!important}
+  .panelhead h2{font-size:18px}
+  .panelhead > div{width:100%}
+  .panelhead button{flex:1}
+  .activityTop{align-items:flex-start}
+  .badge{white-space:nowrap}
+  .loginCard{padding:22px 18px;border-radius:18px}
+  .loginCard h1{font-size:24px}
+}
+
+
+/* ===== V6 VISUAL / DINÁMICO ===== */
+:root{
+  --navy:#18324a;
+  --navy2:#274e70;
+  --blue:#3c78a8;
+  --aqua:#dff3f1;
+  --green:#248b65;
+  --green2:#42a87d;
+  --amber:#d49a32;
+  --red:#c85a52;
+  --ink:#20313f;
+  --muted:#667789;
+  --bg:#eef3f7;
+  --card:#ffffff;
+  --line:#dbe4ec;
+  --shadow:0 10px 30px rgba(22,49,72,.08);
+}
+body{background:var(--bg)!important;color:var(--ink)}
+.sidebar{
+  background:linear-gradient(180deg,#163047 0%,#1f405c 52%,#18324a 100%)!important;
+  box-shadow:10px 0 30px rgba(17,38,55,.10)
+}
+.sidebar .brand{padding:24px 20px!important}
+.sidebar .brand h2,.sidebar .brand p{color:#fff!important}
+.nav a{margin:5px 10px;border-radius:12px;transition:.2s ease}
+.nav a:hover{background:rgba(255,255,255,.10);transform:translateX(3px)}
+.nav a.active{background:linear-gradient(90deg,#3d779e,#2d6088)!important;box-shadow:0 8px 18px rgba(0,0,0,.12)}
+.main{background:transparent!important}
+.topbar{
+  background:linear-gradient(135deg,#fff,#f7fafc);
+  border:1px solid var(--line);
+  border-radius:20px;
+  padding:18px 20px!important;
+  box-shadow:var(--shadow);
+  margin-bottom:18px
+}
+.topbar h1{font-size:26px!important;color:var(--navy)}
+.topbar p{color:var(--muted)!important}
+.filters input,.filters select{
+  background:#fff!important;border-radius:12px!important;border:1px solid var(--line)!important;
+  box-shadow:0 4px 14px rgba(35,65,88,.04)
+}
+.userTop{
+  background:linear-gradient(90deg,#fff 0%,#f6fbfc 100%)!important;
+  box-shadow:0 3px 14px rgba(22,49,72,.06)
+}
+.userAvatar{
+  background:linear-gradient(135deg,#2e719a,#1d405b)!important;
+  box-shadow:0 6px 15px rgba(31,74,104,.22)
+}
+.userLoginBadge{background:#e6f5ee!important}
+.panel,.activity,.kpi{
+  background:var(--card)!important;
+  border:1px solid var(--line)!important;
+  box-shadow:var(--shadow)!important;
+  border-radius:18px!important
+}
+.panel{overflow:hidden}
+.panelhead{
+  padding-bottom:14px!important;
+  border-bottom:1px solid #edf1f4
+}
+.kpirow{gap:16px!important}
+.kpi{
+  position:relative;overflow:hidden;
+  min-height:122px;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:18px 18px 18px 22px!important;
+  transition:transform .2s ease, box-shadow .2s ease
+}
+.kpi:hover{transform:translateY(-4px);box-shadow:0 16px 34px rgba(22,49,72,.13)!important}
+.kpi:before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:6px;
+  background:linear-gradient(180deg,var(--blue),var(--green))
+}
+.kpi b{font-size:28px!important;color:var(--navy);margin-top:5px}
+.kpi .small{color:var(--muted)}
+.activity{
+  position:relative;
+  transition:.2s ease;
+  padding:18px!important
+}
+.activity:hover{transform:translateY(-2px);box-shadow:0 16px 35px rgba(22,49,72,.11)!important}
+.activityTop h3{color:var(--navy)}
+.bar{height:9px!important;background:#edf2f5!important;border-radius:999px!important;overflow:hidden}
+.fill{background:linear-gradient(90deg,#2b8b66,#49b88a)!important;border-radius:999px}
+.badge{
+  padding:8px 12px!important;border-radius:999px!important;
+  font-weight:800!important;box-shadow:0 3px 10px rgba(0,0,0,.04)
+}
+.badge.done{background:#e5f5ec!important;color:#21714f!important}
+.badge.progress{background:#fff3dc!important;color:#986514!important}
+.badge.pending{background:#fbeceb!important;color:#a34b45!important}
+button.primary,.primary{
+  background:linear-gradient(135deg,#1f405c,#2f658e)!important;
+  border:none!important;box-shadow:0 7px 16px rgba(30,63,89,.18)!important
+}
+button.success,.success{
+  background:linear-gradient(135deg,#21815f,#38a777)!important;
+  border:none!important;color:#fff!important
+}
+button.secondary,.secondary{
+  background:#f1f5f8!important;border:1px solid #dce5ec!important;color:#2a4960!important
+}
+button.danger,.danger{border-radius:9px!important}
+button{transition:.18s ease}
+button:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.02)}
+.report{
+  background:linear-gradient(180deg,#fff,#f8fbfc)!important;
+  border:1px solid var(--line)!important;
+  border-radius:16px!important;
+  padding:20px!important
+}
+.tablewrap{border:1px solid var(--line);border-radius:14px;overflow:hidden}
+thead{background:#edf4f8!important}
+tbody tr:hover{background:#f7fbfd}
+.modalbox{border-radius:22px!important;box-shadow:0 24px 80px rgba(16,37,53,.28)!important}
+.loginOverlay{
+  background:
+   radial-gradient(circle at 15% 15%,rgba(70,168,142,.20),transparent 25%),
+   radial-gradient(circle at 85% 80%,rgba(54,120,168,.18),transparent 28%),
+   linear-gradient(135deg,#eef4f7,#f9fbfc)!important
+}
+.loginCard{
+  border:none!important;
+  box-shadow:0 28px 80px rgba(20,47,67,.18)!important;
+  background:rgba(255,255,255,.96)!important
+}
+.loginBrand img{border:none!important;box-shadow:none!important}
+.loginCard h1{color:var(--navy)!important}
+.section.active{animation:fadeUp .25s ease}
+@keyframes fadeUp{from{opacity:.25;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:900px){
+  .topbar{border-radius:16px;padding:15px!important}
+  .kpi{min-height:108px}
+}
+@media(max-width:560px){
+  .topbar h1{font-size:21px!important}
+  .topbar{margin-bottom:12px}
+  .kpi b{font-size:25px!important}
+  .activity{padding:15px!important}
+}
+
+
+/* V7 hours-based activity advance */
+#advBagInfo{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#advHours{font-weight:700}
+
+
+/* ===== V8: CORRECCIÓN DE ESTRUCTURA + AGENDA ===== */
+@media(min-width:901px){
+  .userTop{margin-left:255px!important;width:calc(100% - 255px)!important;position:relative!important;top:auto!important}
+  #visualStatusStrip{margin-left:255px;width:calc(100% - 255px)!important}
+  .sidebar{top:0!important}
+  .content{max-width:none!important;width:calc(100% - 255px)!important;box-sizing:border-box}
+}
+body{overflow-x:hidden}
+.top{align-items:flex-start!important}
+.top>div:first-child{min-width:0}
+.filters{flex:0 1 630px}
+.calendarHero{background:linear-gradient(135deg,#18324a,#2d668e);color:#fff;border-radius:20px;padding:22px;box-shadow:0 16px 35px rgba(22,49,72,.16);margin-bottom:18px}
+.calendarHero h2{margin:0 0 6px;color:#fff}
+.calendarHero p{margin:0;color:rgba(255,255,255,.82)}
+.calendarToolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-top:14px}
+.calendarGrid{display:grid;grid-template-columns:1.1fr 1.9fr;gap:18px}
+.calendarDay{display:grid;gap:10px}
+.dayEvent{padding:14px 16px;border:1px solid var(--line);border-left:5px solid var(--blue);border-radius:14px;background:#fff;box-shadow:0 6px 18px rgba(22,49,72,.05)}
+.dayEvent .time{font-weight:800;color:var(--navy)}
+.dayEvent .title{font-weight:800;margin:4px 0;color:var(--ink)}
+.availabilityCard{padding:16px;border:1px dashed #b9c9d6;border-radius:14px;background:#f7fbfd}
+.conflictBox{padding:11px 13px;border-radius:10px;font-size:13px;margin-top:8px}
+.conflictOk{background:#e9f6ef;color:#256b4c}
+.conflictBad{background:#fff0ee;color:#a13e36}
+.calendarEmpty{padding:24px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:14px}
+.scheduleInfo{padding:12px 14px;border-radius:12px;background:#eef5f8;border:1px solid #d6e3ea;color:#29465c;font-size:13px}
+@media(max-width:900px){
+  .calendarGrid{grid-template-columns:1fr}
+  .calendarHero{border-radius:16px;padding:18px}
+}
+
+/* ===== V9: MIGRACIÓN A SUPABASE (calendario visual + alertas) ===== */
+#fullCalendarEl{min-height:520px}
+#fullCalendarEl .fc{font-family:inherit;font-size:13px}
+#fullCalendarEl .fc-toolbar-title{color:var(--navy);font-size:18px}
+#fullCalendarEl .fc-button-primary{background:var(--nav)!important;border-color:var(--nav)!important}
+#fullCalendarEl .fc-event{border-radius:6px;border:none;padding:1px 4px}
+.loginCard label{display:block;margin-top:6px;font-size:13px;color:#5f6b76;font-weight:600}
+[data-role="lector"] .badge.danger,[data-role="lector"] button.danger{display:none}
+
+/* ===== V10: LOGO REAL, ICONOGRAFÍA, TAB BAR MÓVIL Y PAGOS ===== */
+.userTop{display:flex!important;align-items:center;justify-content:space-between;gap:14px;padding:10px 20px}
+.topbarLeft{display:flex;align-items:center;gap:10px;min-width:0}
+.topbarLogo{display:flex;align-items:center;height:40px}
+.topbarLogo img{height:100%;width:auto;display:block}
+.topbarRight{display:flex;align-items:center;gap:16px}
+.notifWrap{position:relative}
+.notifBell{position:relative;background:#eef3f7;border:1px solid var(--line);width:40px;height:40px;border-radius:50%;font-size:16px;display:flex;align-items:center;justify-content:center;padding:0}
+.notifCount{position:absolute;top:-4px;right:-4px;background:#2b6dd6;color:#fff;font-size:10px;font-weight:800;min-width:17px;height:17px;border-radius:99px;display:inline-flex;align-items:center;justify-content:center;padding:0 4px}
+.notifPanel{display:none;position:absolute;right:0;top:48px;width:280px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 20px 50px rgba(20,40,60,.18);padding:12px;z-index:60}
+.notifPanel.show{display:block}
+.notifTitle{font-weight:800;color:var(--navy);font-size:13px;margin-bottom:8px}
+.notifItem{padding:8px 0;border-bottom:1px solid #eef1f4;font-size:13px}
+.notifItem:last-child{border-bottom:none}
+.userAvatarWrap{position:relative;display:flex;align-items:center;cursor:pointer}
+.userAvatarWrap .userAvatar{width:40px;height:40px;font-size:14px}
+.avatarDot{position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:#2fb872;border:2px solid #fff}
+.userMenuPanel{display:none;position:absolute;right:0;top:50px;width:230px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 20px 50px rgba(20,40,60,.18);padding:14px;z-index:60;text-align:left}
+.userMenuPanel.show{display:block}
+.userMenuPanel .userName{white-space:normal;font-size:14px}
+.welcomeCard{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;background:linear-gradient(135deg,#fff,#f4f9fb);border:1px solid var(--line);border-radius:20px;padding:16px 20px;box-shadow:var(--shadow);margin-bottom:18px}
+.welcomeLeft{display:flex;align-items:center;gap:14px}
+.userAvatar.big{width:56px;height:56px;font-size:19px;flex:0 0 auto}
+.welcomeHi{font-size:19px;font-weight:800;color:var(--navy)}
+.welcomeRole{font-size:13px;color:var(--muted);margin-top:2px}
+.filterChip{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:0 12px;box-shadow:0 4px 14px rgba(35,65,88,.04)}
+.filterChip select,.filterChip input{border:none!important;box-shadow:none!important;background:transparent!important;padding:10px 4px 10px 0!important;color:var(--navy);font-weight:600;accent-color:var(--navy)}
+select{accent-color:var(--navy);cursor:pointer}
+.metricIcon{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;margin-bottom:10px}
+.iconBlue{background:#e7f1fd}
+.iconGreen{background:#e6f7ee}
+.iconPurple{background:#efe8fb}
+.iconOrange{background:#fdf0e3}
+.iconTeal{background:#e2f6f3}
+.iconRed{background:#fbe9e7}
+.activityIcon{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:19px;flex:0 0 auto}
+.activityTop{align-items:flex-start!important}
+.activityTop>div:nth-child(2){flex:1;min-width:0}
+.progressRow{display:flex;align-items:center;gap:10px;margin-top:8px}
+.progressRow .bar{flex:1;margin:0}
+.progressRow .pct{font-size:12px;font-weight:800;color:var(--navy);white-space:nowrap}
+.badge.paid{background:#e5f5ec;color:#21714f;border:none;cursor:pointer}
+.badge.unpaid{background:#fff3dc;color:#986514;border:none;cursor:pointer}
+.mobileTabBar{display:none}
+@media(max-width:900px){
+  .content{padding-bottom:84px}
+  .mobileTabBar{
+    display:flex;position:fixed;left:0;right:0;bottom:0;z-index:75;
+    background:#fff;border-top:1px solid var(--line);box-shadow:0 -8px 24px rgba(20,40,60,.10);
+    padding:6px 2px calc(6px + env(safe-area-inset-bottom))
+  }
+  .mtab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;color:#7c8a97;text-decoration:none;font-size:10px;font-weight:700;padding:6px 2px;border-radius:10px}
+  .mtab.active{color:var(--navy)}
+  .mtabIcon{font-size:18px}
+  .topbarLogo img{height:32px}
+  .welcomeCard{padding:14px}
+  .welcomeHi{font-size:16px}
+  /* El breakpoint de 1000px (V5) convierte .nav en carrusel horizontal para
+     una barra superior; dentro del cajón lateral deslizante (<=900px) debe
+     verse como lista vertical normal. */
+  .sidebar .nav{display:block!important;overflow:visible!important}
+  .sidebar .nav a{white-space:normal!important}
+}
+@media(max-width:560px){
+  .userTop{padding:8px 14px}
+  .topbarLogo img{height:28px}
+}
+
+/* ===== V11: SIDEBAR CLARA CON LOGO REAL + TOPBAR FUSIONADO + ACCIONES CON
+   COLOR + MINI CALENDARIO (para igualar el mockup entregado por la clienta) */
+.sidebar{
+  background:#fff!important;
+  border-right:1px solid var(--line);
+  box-shadow:2px 0 18px rgba(22,49,72,.05)!important;
+  display:flex;flex-direction:column;padding:22px 16px!important
+}
+.sidebarLogo{padding:4px 6px 14px;text-align:center}
+.sidebarLogo img{max-width:100%;height:auto;display:inline-block}
+.sidebarBlurb{
+  font-size:12.5px;line-height:1.5;color:var(--muted);
+  background:#f3f8fb;border:1px solid var(--line);border-radius:14px;
+  padding:12px 14px;margin:0 6px 18px
+}
+.nav a{
+  display:flex!important;align-items:center;gap:10px;
+  color:var(--text)!important;font-weight:600
+}
+.nav a:hover{background:#eef4f9!important;transform:translateX(2px)}
+.nav a.active{
+  background:#e4f0fb!important;color:var(--navy)!important;
+  box-shadow:none!important
+}
+.navIcon{
+  width:30px;height:30px;border-radius:9px;flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;font-size:14px
+}
+.sidebarTip{
+  margin:auto 6px 6px;padding:16px;border-radius:16px;
+  background:linear-gradient(135deg,#18324a,#2d668e);color:#fff;
+  text-align:center
+}
+.sidebarTipIcon{font-size:20px;margin-bottom:8px}
+.sidebarTipTitle{font-weight:800;font-size:13.5px;margin-bottom:6px}
+.sidebarTipText{font-size:11.5px;opacity:.85;line-height:1.4}
+
+.userGreeting{font-size:16px;font-weight:800;color:var(--navy)}
+
+.quickActions{display:flex;flex-direction:column;gap:10px}
+.quickAction{
+  display:flex;align-items:center;gap:10px;width:100%;
+  border:1px solid var(--line)!important;border-radius:14px!important;
+  padding:10px 14px!important;font-weight:700!important;font-size:13.5px;
+  text-align:left;box-shadow:none!important
+}
+.quickAction.qaBlue{background:#eaf3fd!important;color:#1d4e78!important}
+.quickAction.qaTeal{background:#e2f6f3!important;color:#1a6f64!important}
+.quickAction.qaGreen{background:#e6f7ee!important;color:#21714f!important}
+.quickAction.qaOrange{background:#fdf0e3!important;color:#93551a!important}
+
+.miniCalendar{padding:4px 2px}
+.miniCalHead{display:flex;align-items:center;justify-content:space-between;font-weight:800;color:var(--navy);font-size:13px;margin-bottom:10px;text-transform:capitalize}
+.miniCalNav{width:24px;height:24px;padding:0;border-radius:8px;background:#eef3f7;color:var(--navy);font-size:14px;font-weight:800;line-height:1;flex:0 0 auto}
+.miniCalNav:hover{filter:brightness(.95)}
+.miniCalGrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+.miniCalGridHead{margin-bottom:4px;font-size:10.5px;font-weight:800;color:var(--muted)}
+.miniCalDay{position:relative;font-size:12px;padding:6px 0;border-radius:8px;color:var(--text)}
+.miniCalDay.empty{visibility:hidden}
+.miniCalDay.today{background:var(--navy);color:#fff;font-weight:800}
+.miniCalDay.hasEvent::after{content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--accent)}
+.miniCalDay.today.hasEvent::after{background:#fff}
+
+@media(max-width:900px){
+  .sidebarTip{display:none}
+  /* El modal debe quedar SIEMPRE por encima de la barra de pestañas móvil
+     (antes tenían el mismo nivel visual y la barra tapaba el botón
+     "Guardar" de los formularios). Se le da además espacio abajo para que
+     el cuadro no quede pegado a esa barra. */
+  .modal{padding-bottom:calc(20px + 70px + env(safe-area-inset-bottom))}
+  .modalbox{max-height:82vh}
+}
+
+/* ===== V12: INFORME VISUAL (estilo infografía para pantalla, PDF y Word) === */
+.reportTopBar{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;padding-bottom:16px;border-bottom:2px solid var(--line);margin-bottom:20px}
+.reportBrand{display:flex;align-items:center;gap:14px}
+.reportBrand img{height:52px;width:auto;display:block}
+.reportBrandText h2{margin:0;font-size:17px;color:var(--navy);line-height:1.3}
+.reportBrandText p{margin:4px 0 0;font-size:11.5px;color:var(--muted);max-width:340px}
+.reportInfoBox{display:grid;grid-template-columns:auto auto;gap:3px 10px;font-size:12px;text-align:left}
+.reportInfoBox .lbl{color:var(--muted);font-weight:700;white-space:nowrap}
+.reportInfoBox .val{color:var(--text);font-weight:600}
+.reportSectionTitle{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:var(--navy);margin:22px 0 10px;text-transform:uppercase;letter-spacing:.3px}
+.reportKpiRow{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:12px}
+.reportKpiCard{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;position:relative;overflow:hidden;box-shadow:0 4px 14px rgba(20,40,60,.04)}
+.reportKpiCard .k-label{font-size:10px;text-transform:uppercase;color:var(--muted);font-weight:800;letter-spacing:.3px}
+.reportKpiCard .k-value{font-size:21px;font-weight:800;margin-top:6px;color:var(--navy)}
+.reportKpiCard .k-sub{font-size:10.5px;color:var(--muted);margin-top:4px;line-height:1.4}
+.reportKpiCard:after{content:"";position:absolute;left:0;right:0;bottom:0;height:4px}
+.reportKpiCard.c-blue:after{background:#2f658e}
+.reportKpiCard.c-green:after{background:#2f8a63}
+.reportKpiCard.c-orange:after{background:#c97b2e}
+.reportKpiCard.c-red{border-color:#f3d9d6}
+.reportKpiCard.c-red .k-value{color:var(--danger)}
+.reportKpiCard.c-red:after{background:var(--danger)}
+.reportKpiCard.c-purple:after{background:#7a5fc7}
+.reportGrid2{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start}
+.reportMiniCard{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;text-align:center;height:100%;box-sizing:border-box}
+.reportMiniCard .icon{font-size:24px}
+.reportMiniCard .status{font-weight:800;margin:8px 0 2px;font-size:13px}
+.reportMiniCard .status.bad{color:var(--danger)}
+.reportMiniCard .status.ok{color:#21714f}
+.reportMiniCard .amt{font-size:19px;font-weight:800;margin-top:6px}
+.reportMiniCard .amtsub{font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
+.reportStatCard{background:#fff;border:1px solid var(--line);border-radius:14px;padding:6px 16px}
+.reportStatRow{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid #eef1f4;gap:10px}
+.reportStatRow:last-child{border-bottom:none}
+.reportStatRow .rs-label{font-size:12px;color:var(--muted)}
+.reportStatRow .rs-value{font-size:15px;font-weight:800;color:var(--navy);white-space:nowrap}
+.reportProgressMini{display:flex;align-items:center;gap:8px;min-width:90px}
+.reportProgressMini .bar{flex:1;height:7px;background:#edf1f4;border-radius:99px;overflow:hidden;margin:0}
+.reportProgressMini .fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#2b8b66,#49b88a)}
+.reportProgressMini .pct{font-size:11px;font-weight:800;color:var(--navy);white-space:nowrap}
+.reportSignatureBlock{display:flex;justify-content:center;margin-top:6px}
+.reportSignatureBlock img{max-width:100%;width:460px;border-radius:12px}
+.reportActionsList{margin:0;padding-left:18px}
+.reportActionsList li{margin-bottom:7px;font-size:12.5px;line-height:1.5}
+.reportAnalysis p{margin:0 0 10px;font-size:12.5px;line-height:1.65;color:var(--text)}
+@media(max-width:700px){
+  .reportGrid2{grid-template-columns:1fr}
+  .reportTopBar{flex-direction:column}
+}
+@media print{
+  .reportTopBar,.reportGrid2{break-inside:avoid}
+}
+
+/* ============================================================================
+   V13: WIZARD (Empresa -> Sede -> Actividades) y banner de cierre de mes
+   ============================================================================ */
+.wizardSteps{display:flex;gap:8px;margin:4px 0 18px;flex-wrap:wrap}
+.wizardStep{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;color:var(--muted);background:var(--soft);border:1px solid var(--line);border-radius:99px;padding:6px 12px}
+.wizardStep.active{color:#fff;background:var(--navy);border-color:var(--navy)}
+.wizardPane label{display:block;margin-bottom:6px;font-size:12.5px;font-weight:700;color:var(--navy)}
+.wizActivitiesList{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:6px 4px;margin:10px 0}
+.wizActivityRow{display:flex;align-items:center;gap:9px;padding:9px 10px;border-bottom:1px solid #f0f3f6;font-size:13px}
+.wizActivityRow:last-child{border-bottom:none}
+.wizActivityRow input[type=checkbox]{width:auto;flex:0 0 auto}
+.wizActivityNew{background:#f4f9f6}
+.wizActivityNew .small{margin-left:2px}
+.linklike{background:none;border:none;color:var(--red);font-size:11.5px;cursor:pointer;margin-left:auto;padding:0;text-decoration:underline;width:auto}
+.wizAddActivity{display:flex;gap:8px}
+.wizAddActivity input{flex:1}
+.wizAddActivity button{width:auto;white-space:nowrap}
+
+.monthCloseBanner{border-radius:12px;padding:13px 15px;font-size:12.5px;line-height:1.55;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.monthCloseBanner button{width:auto;white-space:nowrap;margin-left:auto}
+.monthCloseBanner.openBanner{background:#fff6db;border:1px solid #f0dfa0;color:#7a5c0a}
+.monthCloseBanner.closedBanner{background:#e9f8ef;border:1px solid #bfe6cf;color:#17733c}
+
+/* ============================================================================
+   V14: Editar actividades de sede (reutiliza estilos del wizard) + tour de
+   bienvenida con tooltips paso a paso.
+   ============================================================================ */
+.tourSpotlight{position:fixed;z-index:500;border-radius:12px;box-shadow:0 0 0 9999px rgba(10,20,30,.62);border:2px solid #fff;pointer-events:none;transition:top .25s ease,left .25s ease,width .25s ease,height .25s ease}
+.tourTooltip{position:fixed;z-index:501;width:320px;max-width:90vw;background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(10,20,30,.35);padding:16px;transition:top .25s ease,left .25s ease}
+.tourTooltipStep{font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);letter-spacing:.4px;margin-bottom:4px}
+.tourTooltip h3{margin:2px 0 8px;font-size:15px;color:var(--navy)}
+.tourTooltip p{margin:0 0 14px;font-size:13px;line-height:1.5;color:var(--ink)}
+.tourActions{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tourNavBtns{display:flex;gap:8px}
+.tourNavBtns button{width:auto}
+@media (max-width:640px){.tourTooltip{left:16px!important;right:16px;width:auto}}
+/* La barra de avance también se usa dentro de una celda de tabla angosta
+   (Registro de horas); sin un mínimo, flex:1 la deja casi invisible. */
+.progressRow .bar{min-width:60px}
+.wizActivityRow input[type=number]{width:78px;flex:0 0 auto}
+/* V15: widget circular de % de avance del mes (horas asignadas vs ejecutadas)
+   arriba de las tarjetas del Dashboard. */
+.monthProgressWrap{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.radialProgress{width:104px;height:104px;flex:0 0 auto;transform:rotate(-90deg)}
+.radialTrack{fill:none;stroke:var(--line);stroke-width:10}
+.radialBar{fill:none;stroke:var(--accent);stroke-width:10;stroke-linecap:round;stroke-dasharray:326.7256;stroke-dashoffset:326.7256;transition:stroke-dashoffset .6s ease,stroke .3s ease}
+.radialLabel{display:flex;flex-direction:column;min-width:180px}
+.radialPct{font-size:30px;font-weight:800;color:var(--text)}
+.radialSub{font-size:13px;color:var(--muted);margin-top:2px}
+.radialTitle{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-top:6px}
+@media (max-width:640px){.monthProgressWrap{gap:14px}.radialLabel{min-width:0}}
+/* V16: botón "Ver todas las citas" del calendario — estado activo. */
+.calToggleActive{background:var(--navy);color:#fff}
+/* V17: caja de advertencia del modal de eliminar empresa. */
+.warningBox{background:#fff5f4;border:1px solid #f3c9c4;border-radius:10px;padding:14px 16px;color:#7a2e26}
+.warningBox ul{margin:10px 0 0 18px;padding:0}
+.warningBox li{margin-bottom:3px}
+/* V19: Cuenta de cobro — rediseño corporativo formal (marca arriba,
+   Yasbleidis como prestadora y firmante, sin cuadros ni tarjetas de más). */
+/* V20: colores de marca nueva (SST Asesorías y Consultorías) — alcance
+   limitado a la Cuenta de cobro, sin tocar el resto de la paleta todavía. */
+.invoiceHeader{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-bottom:16px;border-bottom:3px solid #0B2D5B;margin-bottom:18px}
+.invoiceLogo{height:50px;width:auto;display:block}
+.invoiceHeaderMeta{display:flex;flex-direction:column;gap:2px;text-align:right}
+.invoiceNumber{font-size:13px;font-weight:800;color:#0B2D5B}
+.invoiceMetaLine{font-size:11px;color:var(--muted)}
+.invoiceTitle{font-size:22px;font-weight:800;letter-spacing:.5px;color:#0B2D5B;text-align:center;margin:0 0 22px;text-transform:uppercase}
+.invoiceConcept{font-size:13px;line-height:1.7;color:var(--text);background:#F9D7E7;border-left:3px solid #7B2CBF;padding:12px 16px;border-radius:0 8px 8px 0;margin:0 0 6px}
+.invoiceTotalBand{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(120deg,#E91E63,#7B2CBF);color:#fff;border-radius:10px;padding:16px 22px;margin-top:18px;font-weight:800;letter-spacing:.3px;box-shadow:0 10px 26px rgba(123,44,191,.28)}
+.invoiceTotalBand span:first-child{font-size:13px;text-transform:uppercase}
+.invoiceTotalValue{font-size:22px}
+.invoiceSignerName{text-align:center;font-weight:800;color:#0B2D5B;margin:10px 0 0;font-size:13px;letter-spacing:.3px;text-transform:uppercase}
+.invoiceFooter{display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-top:34px;padding-top:12px;border-top:1px solid var(--line);font-size:10.5px;color:var(--muted)}
+@media print{.invoiceHeader,.reportGrid2{break-inside:avoid}}
+
+/* ============================================================================
+   V20: TÁCTIL Y TABLET (iPad / celular) — pensado a partir de 3 problemas
+   reales del diseño anterior:
+   1) El punto de corte "modo móvil" era solo el ancho (<=900px). Un iPad en
+      horizontal (1024px) quedaba clasificado como "escritorio": sidebar fija
+      de 255px, botones sin tamaño mínimo táctil, 4 columnas apretadas. Ahora
+      se usa @media(hover:none)+(pointer:coarse) para detectar TÁCTIL de
+      verdad, sin importar el ancho, y un rango intermedio de tablet entre
+      901-1180px para que no se vea "apretado".
+   2) Las tablas en celular obligaban a un scroll horizontal "a ciegas": al
+      deslizar, se perdía de vista a qué fila correspondía cada celda. Ahora
+      la primera columna queda fija (sticky) y aparece un degradado sutil
+      indicando que hay más contenido hacia la derecha.
+   3) El calendario (FullCalendar) siempre abría en vista de mes completo,
+      ilegible en un celular angosto. En pantallas chicas abre en lista
+      semanal y cambia de vista sola si se rota el dispositivo.
+   ============================================================================ */
+
+/* --- 1) Objetivos táctiles reales (iPad incluido, sin importar el ancho) --- */
+@media (hover:none) and (pointer:coarse){
+  button,.btn{min-height:44px}
+  .nav a{min-height:44px}
+  .mtab{min-height:48px}
+  .badge.paid,.badge.unpaid{min-height:34px;display:inline-flex;align-items:center}
+  .notifBell,.miniCalNav,.userAvatarWrap{min-width:44px;min-height:44px}
+  .miniCalDay{padding:9px 0}
+  input,select,textarea{font-size:16px}
+  a,button,[onclick]{-webkit-tap-highlight-color:rgba(31,74,104,.12)}
+}
+
+/* --- 2) Tablet: iPad en vertical u horizontal, sin caer en modo celular --- */
+@media (min-width:901px) and (max-width:1180px){
+  .sidebar{width:220px}
+  .content{margin-left:220px!important;width:calc(100% - 220px)!important}
+  .userTop,#visualStatusStrip{margin-left:220px!important;width:calc(100% - 220px)!important}
+  .kpirow{grid-template-columns:repeat(2,1fr)!important}
+  .grid4{grid-template-columns:repeat(2,1fr)}
+  .calendarGrid{grid-template-columns:1fr}
+  .sidebarTip{display:none}
+  .formgrid{grid-template-columns:repeat(2,1fr)}
+}
+
+/* --- 3) Tablas: columna fija + pista visual de que hay más a la derecha --- */
+@media (max-width:900px){
+  .tablewrap{position:relative}
+  .tablewrap::after{content:'';position:absolute;top:0;right:0;bottom:0;width:22px;background:linear-gradient(90deg,transparent,rgba(20,40,60,.10));pointer-events:none}
+  .tablewrap table th:first-child,.tablewrap table td:first-child{position:sticky;left:0;background:#fff;box-shadow:2px 0 6px rgba(20,40,60,.06);z-index:1}
+  table{min-width:640px}
+}
+
+/* --- Modal: indicador visual de "hoja deslizable" (patrón iOS/Android) --- */
+@media (max-width:900px){
+  .modalbox{position:relative;padding-top:28px!important}
+  .modalbox::before{content:'';position:absolute;top:10px;left:50%;transform:translateX(-50%);width:38px;height:4px;border-radius:99px;background:#d8e0e8}
+}
+
+/* --- Entrada un poco más dinámica para las tarjetas del Dashboard --- */
+.kpirow .kpi,.grid4 .metric{animation:fadeUp .35s ease both}
+.kpirow .kpi:nth-child(2),.grid4 .metric:nth-child(2){animation-delay:.03s}
+.kpirow .kpi:nth-child(3),.grid4 .metric:nth-child(3){animation-delay:.06s}
+.kpirow .kpi:nth-child(4),.grid4 .metric:nth-child(4){animation-delay:.09s}
