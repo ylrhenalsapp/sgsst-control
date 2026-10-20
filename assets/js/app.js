@@ -1004,10 +1004,20 @@ async function openEvidenceFile(id) {
 // ---------------------------------------------------------------------------
 function renderExpenses() {
   const s = site();
-  if (!s) { if ($('expensesTable')) $('expensesTable').innerHTML = `<tr><td colspan="5" class="empty">${noSiteMessage()}</td></tr>`; return; }
+  if (!s) { if ($('expensesTable')) $('expensesTable').innerHTML = `<tr><td colspan="6" class="empty">${noSiteMessage()}</td></tr>`; return; }
   const rows = [...state.expensesSite].sort((a, b) => b.record_date.localeCompare(a.record_date));
   const c = company();
-  if ($('expensesTable')) $('expensesTable').innerHTML = rows.length ? rows.map(x => `<tr><td>${x.record_date}</td><td>${c?.name || '—'}<br><span class="small">${s?.name || ''}</span></td><td>${x.concept}</td><td>${money(x.amount)}</td><td style="white-space:nowrap"><button class="secondary" data-requires-write onclick="editExpense('${x.id}')">Editar</button> <button class="danger" data-requires-write onclick="deleteItem('expenses','${x.id}')">Eliminar</button></td></tr>`).join('') : `<tr><td colspan="5" class="empty">No hay gastos registrados.</td></tr>`;
+  if ($('expensesTable')) $('expensesTable').innerHTML = rows.length ? rows.map(x => `<tr><td>${x.record_date}</td><td>${c?.name || '—'}<br><span class="small">${s?.name || ''}</span></td><td>${x.concept}</td><td>${money(x.amount)}</td><td><button class="badge ${x.paid ? 'paid' : 'unpaid'}" data-requires-write onclick="toggleExpensePaid('${x.id}',${!x.paid})">${x.paid ? '✓ Pagado' : '⏳ Pendiente'}</button></td><td style="white-space:nowrap"><button class="secondary" data-requires-write onclick="editExpense('${x.id}')">Editar</button> <button class="danger" data-requires-write onclick="deleteItem('expenses','${x.id}')">Eliminar</button></td></tr>`).join('') : `<tr><td colspan="6" class="empty">No hay gastos registrados.</td></tr>`;
+}
+
+// Marca un viático como pagado/pendiente (migración 0021) — igual que
+// togglePaid() para horas: puramente informativo, no afecta la Cuenta de
+// cobro ni ningún informe, solo deja de verse como pendiente de pago.
+async function toggleExpensePaid(id, value) {
+  const { error } = await sb.from('expenses').update({ paid: value }).eq('id', id);
+  if (error) return toast('No se pudo actualizar el pago: ' + error.message + (error.message?.includes('paid') ? ' (falta correr la migración 0021 en Supabase).' : ''));
+  await refreshAll();
+  toast(value ? '✓ Gasto marcado como pagado.' : 'Gasto marcado como pendiente de pago.');
 }
 
 let editingExpenseId = null;
