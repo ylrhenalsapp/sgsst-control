@@ -1609,7 +1609,7 @@ async function renderConfig() {
   // La columna "Proveedor" queda siempre visible (no depende de si la
   // empresa ya tiene uno asignado) para que quede presente al editar
   // cualquier empresa, y así asignarlo/cambiarlo cuando haga falta.
-  $('cfg-companies').innerHTML = `<div class="panelhead"><h2>Empresas</h2><button class="primary" data-requires-write onclick="openCompanyWizard()">+ Agregar empresa</button></div><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sedes</th><th>Proveedor</th><th>Estado</th><th></th></tr></thead><tbody>${state.companies.map(c => `<tr><td>${c.name}</td><td>${c.sites.length}</td><td><select id="prov-${c.id}" style="min-width:190px"><option value="">Sin proveedor</option>${state.providers.map(p => `<option value="${p.id}" ${c.provider_id === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}</select> <button class="secondary" data-requires-write onclick="updateCompanyProvider('${c.id}')">Guardar</button></td><td>${c.sites.length ? '<span class="badge done">Activa</span>' : '<span class="badge pending" title="Sin sedes: agrega una desde Sedes y horas para activarla">Inactiva</span>'}</td><td><button class="danger" data-requires-write onclick="removeCompany('${c.id}')">Eliminar</button></td></tr>`).join('')}</tbody></table></div>`;
+  $('cfg-companies').innerHTML = `<div class="panelhead"><h2>Empresas</h2><button class="primary" data-requires-write onclick="openCompanyWizard()">+ Agregar empresa</button></div><div class="tablewrap"><table><thead><tr><th>Empresa</th><th>Sedes</th><th>Proveedor</th><th>Estado</th><th></th></tr></thead><tbody>${state.companies.map(c => `<tr><td>${c.name} <button class="secondary" data-requires-write onclick="editCompanyPrompt('${c.id}')" title="Editar nombre de la empresa" style="padding:2px 9px;font-size:12px">✏️ Editar</button></td><td>${c.sites.length}</td><td><select id="prov-${c.id}" style="min-width:190px"><option value="">Sin proveedor</option>${state.providers.map(p => `<option value="${p.id}" ${c.provider_id === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}</select> <button class="secondary" data-requires-write onclick="updateCompanyProvider('${c.id}')">Guardar</button></td><td>${c.sites.length ? '<span class="badge done">Activa</span>' : '<span class="badge pending" title="Sin sedes: agrega una desde Sedes y horas para activarla">Inactiva</span>'}</td><td><button class="danger" data-requires-write onclick="removeCompany('${c.id}')">Eliminar</button></td></tr>`).join('')}</tbody></table></div>`;
 
   const rows = [];
   for (const c of state.companies) {
@@ -1736,6 +1736,22 @@ function renderMyDataPanel() {
 // se evita un borrado accidental de algo que no se puede deshacer.
 // ---------------------------------------------------------------------------
 let deleteCompanyTarget = null;
+
+// Corrige el nombre de una empresa ya creada (por ejemplo, si quedó mal
+// escrito o cambió de razón social). No afecta sedes, horas, evidencias,
+// agenda, gastos ni informes — todos esos solo guardan el id de la empresa,
+// nunca el nombre, así que el cambio se refleja en todo automáticamente.
+async function editCompanyPrompt(id) {
+  const c = state.companies.find(x => x.id === id); if (!c) return;
+  const n = prompt('Nuevo nombre de la empresa:', c.name);
+  if (n === null) return; // canceló
+  if (!n.trim()) return toast('El nombre no puede quedar vacío');
+  if (n.trim() === c.name) return;
+  const { error } = await sb.from('companies').update({ name: n.trim() }).eq('id', id);
+  if (error) return toast('No se pudo actualizar: ' + error.message);
+  await init();
+  toast('Nombre de la empresa actualizado.');
+}
 
 function removeCompany(id) {
   if (state.companies.length <= 1) return toast('Debe existir al menos una empresa');
