@@ -70,6 +70,11 @@ h1,h2,h3,
   letter-spacing:.2px;
 }
 
+/* Logo nuevo (lockup completo, con línea de firma) — un poco más de ancho
+   que el valor por defecto de app.css (280px) para que la firma cursiva se
+   lea bien; el logo sigue sin recortarse en ningún lado. */
+.loginBrand img{max-width:340px!important}
+
 /* ---------------------------------------------------------------------------
    1) SIDEBAR + NAVEGACIÓN
    --------------------------------------------------------------------------- */
