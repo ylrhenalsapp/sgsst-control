@@ -414,6 +414,9 @@ async function refreshAll() {
     state.bagExists = false;
     renderBagAlert();
     renderDashboard();
+    renderHeroBanner();
+    renderHoursTrend();
+    renderUpcomingAppointments();
     renderActivities();
     renderHours();
     renderMonthCloseBanner();
@@ -457,6 +460,9 @@ async function refreshAll() {
 
   renderBagAlert();
   renderDashboard();
+  renderHeroBanner();
+  renderHoursTrend();
+  renderUpcomingAppointments();
   renderActivities();
   renderHours();
   renderMonthCloseBanner();
@@ -532,7 +538,13 @@ function activityProgressBar(siteId, activityId, totalH) {
   // Configuración → Sedes y horas → "Actividades".
   if (!target) return '<span class="small">Sin meta de horas definida</span>';
   const pct = Math.min(100, Math.round((totalH / target) * 100));
-  return `<div class="progressRow"><div class="bar"><div class="fill" style="width:${pct}%"></div></div><span class="pct">${pct}%</span></div>`;
+  // V21 — el color de esta barra ahora sigue el mismo estado de la
+  // actividad (igual que su badge: verde=completada, ámbar=en proceso,
+  // rojo=pendiente) en vez del degradado de marca — es el mismo criterio
+  // ya usado en toda la plataforma para separar "estado" de "marca".
+  const status = taskStatus(siteId, activityId);
+  const statusClass = status === 'Completada' ? 'fillOk' : status === 'En proceso' ? 'fillWarn' : 'fillPending';
+  return `<div class="progressRow"><div class="bar"><div class="fill ${statusClass}" style="width:${pct}%"></div></div><span class="pct">${pct}%</span></div>`;
 }
 
 function filteredHours() { const s = site(), m = selectedMonth(); return state.hoursSite.filter(x => x.site_id === s.id && monthOf(x.record_date) === m); }
@@ -565,6 +577,42 @@ function updateMonthProgressRadial(used, total) {
   }
   if ($('radialProgressPct')) $('radialProgressPct').textContent = pct + '%';
   if ($('radialProgressSub')) $('radialProgressSub').textContent = `${used} h ejecutadas de ${total} h asignadas`;
+
+  // V21 — barra segmentada + leyenda de "Avance del mes" y el aro pequeño
+  // del encabezado superior: los tres muestran el mismo % que ya se
+  // calculaba arriba (pct), ningún cálculo nuevo, solo más lugares donde
+  // se ve ese mismo dato.
+  const freePct = Math.max(0, 100 - pct);
+  if ($('segBarUsed')) $('segBarUsed').style.width = pct + '%';
+  if ($('segBarFree')) $('segBarFree').style.width = freePct + '%';
+  if ($('segLegendUsed')) $('segLegendUsed').textContent = `● Ejecutado ${pct}%`;
+  if ($('segLegendFree')) $('segLegendFree').textContent = `● Disponible ${freePct}%`;
+  const ringBar = $('heroRingBar');
+  if (ringBar) {
+    const RING_CIRC = 138.2; // 2 * PI * 22 (radio del aro del encabezado)
+    ringBar.style.strokeDashoffset = String(RING_CIRC * (1 - pct / 100));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// V21 — Encabezado superior dinámico ("Octubre 2026 · Empresa"). Antes era
+// un texto fijo de marketing; ahora refleja el mes/empresa/sede que ya
+// están seleccionados en los filtros de arriba. Sin consultas nuevas.
+// ---------------------------------------------------------------------------
+const MONTH_NAMES_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+function renderHeroBanner() {
+  const titleEl = $('heroTitle'), subEl = $('heroSub');
+  if (!titleEl || !subEl) return;
+  const c = company(), s = site();
+  if (!c || !s) {
+    titleEl.textContent = '📊 Control inteligente de actividades, horas y evidencias';
+    subEl.textContent = 'Gestión operativa SG-SST en tiempo real';
+    return;
+  }
+  const [y, m] = selectedMonth().split('-');
+  const monthLabel = `${MONTH_NAMES_ES[Number(m) - 1] || ''} ${y}`.trim();
+  titleEl.textContent = `${monthLabel} · ${c.name}`;
+  subEl.textContent = `${s.name} — control operativo del proyecto SG-SST`;
 }
 
 function renderDashboard() {
@@ -580,10 +628,13 @@ function renderDashboard() {
   }
   const m = selectedMonth(), bag = state.bag;
   const hs = filteredHours(), value = hs.reduce((a, x) => a + Number(x.hours) * Number(x.rate), 0);
-  $('mAssigned').textContent = bag.total + ' h';
-  $('mUsed').textContent = bag.used + ' h';
-  $('mRemaining').textContent = bag.remaining + ' h';
-  $('mValue').textContent = money(value);
+  // V21: mismos valores de siempre — animateKpiNumber solo anima la
+  // transición hasta el texto final (idéntico al que había antes); no
+  // cambia el cálculo ni el resultado mostrado.
+  animateKpiNumber($('mAssigned'), Number(bag.total) || 0, bag.total + ' h');
+  animateKpiNumber($('mUsed'), Number(bag.used) || 0, bag.used + ' h');
+  animateKpiNumber($('mRemaining'), Number(bag.remaining) || 0, bag.remaining + ' h');
+  animateKpiNumber($('mValue'), Number(value) || 0, money(value), { money: true });
   document.querySelector('#mAssigned').parentElement.querySelector('.sub').textContent = `Asignadas: ${bag.assigned} h · Saldo anterior: ${bag.carry} h · Adicionales: ${bag.additional} h`;
   document.querySelector('#mRemaining').parentElement.querySelector('.sub').textContent = `Disponible para ${m}`;
   document.querySelector('#mValue').parentElement.querySelector('.sub').textContent = `Tarifa de ${company()?.name || 'la empresa'}: ${money(companyRate(company()))}/h`;
@@ -606,6 +657,99 @@ function renderDashboard() {
       <div style="margin-top:10px">${btn}</div>
     </div>`;
   }).join('') : '<p class="empty">Esta sede todavía no tiene actividades asignadas. Agrégalas desde Configuración → Actividades.</p>';
+}
+
+// ---------------------------------------------------------------------------
+// V21 — Animación de conteo (count-up) de las tarjetas KPI del Dashboard.
+// Puramente visual: "finalText" es exactamente el mismo texto que ya
+// calculaba renderDashboard() antes de este cambio — esta función solo
+// anima la transición hacia ese valor, nunca cambia el resultado. Respeta
+// la preferencia del sistema "reducir movimiento".
+// ---------------------------------------------------------------------------
+function animateKpiNumber(el, targetNumber, finalText, opts = {}) {
+  if (!el) return;
+  const isMoney = !!opts.money, duration = opts.duration || 650;
+  const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (prefersReduced || typeof requestAnimationFrame !== 'function' || !isFinite(targetNumber)) {
+    el.textContent = finalText;
+    return;
+  }
+  const t0 = performance.now();
+  function frame(now) {
+    const p = Math.min(1, (now - t0) / duration);
+    const eased = 1 - Math.pow(1 - p, 3);
+    const val = targetNumber * eased;
+    el.textContent = isMoney ? money(val) : (Math.round(val * 10) / 10) + ' h';
+    if (p < 1) requestAnimationFrame(frame);
+    else el.textContent = finalText; // el último cuadro siempre deja el texto exacto original
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---------------------------------------------------------------------------
+// V21 — Tendencia de horas de los últimos 10 días (panel nuevo del
+// Dashboard). No agrega ninguna consulta a la base de datos: usa
+// state.hoursSite, que refreshAll() ya cargaba para la sede seleccionada.
+// ---------------------------------------------------------------------------
+function renderHoursTrend() {
+  const box = $('hoursTrendChart');
+  if (!box) return;
+  const s = site();
+  if (!s) { box.innerHTML = `<p class="empty">${noSiteMessage()}</p>`; return; }
+  const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const now = new Date();
+  const days = [];
+  for (let i = 9; i >= 0; i--) days.push(new Date(now.getFullYear(), now.getMonth(), now.getDate() - i));
+  const totals = days.map(d => {
+    const iso = d.toISOString().slice(0, 10);
+    return (state.hoursSite || []).filter(h => h.record_date === iso).reduce((a, x) => a + Number(x.hours || 0), 0);
+  });
+  const max = Math.max(1, ...totals);
+  const anyHours = totals.some(h => h > 0);
+  if (!anyHours) {
+    box.innerHTML = '<p class="empty">Todavía no hay horas registradas en los últimos 10 días para esta sede.</p>';
+    return;
+  }
+  box.innerHTML = `<div class="trendChart">${days.map((d, i) => {
+    const h = totals[i];
+    const pct = Math.max(h > 0 ? 6 : 2, Math.round((h / max) * 100));
+    const label = dayNames[d.getDay()] + ' ' + d.getDate();
+    return `<div class="trendBar" title="${h} h · ${label}">
+      <div class="trendCol" style="--h:${pct}%"><span style="height:${pct}%"></span></div>
+      <div class="trendDay">${d.getDate()}</div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+// ---------------------------------------------------------------------------
+// V21 — Próximas citas (panel nuevo del Dashboard). Tampoco agrega ninguna
+// consulta nueva: usa state.calendarSite, que refreshAll() ya cargaba
+// (schedule_events de la sede seleccionada) para la agenda de la sección
+// "Calendario".
+// ---------------------------------------------------------------------------
+function renderUpcomingAppointments() {
+  const box = $('upcomingAppointmentsList');
+  if (!box) return;
+  const s = site();
+  if (!s) { box.innerHTML = `<p class="empty">${noSiteMessage()}</p>`; return; }
+  const now = today();
+  const upcoming = (state.calendarSite || [])
+    .filter(e => e.event_date >= now)
+    .sort((a, b) => (a.event_date + (a.event_time || '')).localeCompare(b.event_date + (b.event_time || '')))
+    .slice(0, 4);
+  if (!upcoming.length) {
+    box.innerHTML = '<p class="empty">No tienes citas próximas programadas en esta sede.</p>';
+    return;
+  }
+  const c = company();
+  box.innerHTML = upcoming.map(e => {
+    const d = new Date(e.event_date + 'T00:00:00');
+    const modality = e.modality === 'virtual' ? '🎥 Virtual' : '📍 Presencial';
+    return `<div class="agendaItem">
+      <span class="d">${d.getDate()}</span>
+      <span><span class="t">${taskName(e.activity_id)}</span><span class="s">${c?.name || ''} · ${e.event_time || ''}${e.duration_minutes ? ' (' + e.duration_minutes + ' min · ' + modality + ')' : ''}</span></span>
+    </div>`;
+  }).join('');
 }
 
 // ---------------------------------------------------------------------------
