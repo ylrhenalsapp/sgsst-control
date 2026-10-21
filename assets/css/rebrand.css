@@ -1,0 +1,210 @@
+/* ============================================================================
+   V21: REBRANDING GLOBAL — SST Asesorías y Consultorías
+   ============================================================================
+   Qué es este archivo:
+   Es una hoja de estilos NUEVA y SEPARADA de assets/css/app.css. No modifica
+   ni borra ninguna regla existente — solo AGREGA reglas que se cargan después
+   y repintan la presentación visual de toda la plataforma (colores,
+   tipografía, sombras, animaciones) con la nueva identidad de marca.
+
+   Por qué está separada (punto de restauración):
+   Como es un archivo aparte, se puede "apagar" con un solo interruptor desde
+   Configuración → Apariencia, sin tocar ni volver a subir ningún archivo:
+   el botón simplemente desactiva este <link> (ver index.html / app.js,
+   función toggleLegacyTheme()). Si algo se ve mal después de publicar este
+   cambio, Yasbleidis puede volver al diseño anterior de inmediato.
+
+   Qué NO cambia:
+   Ningún botón, combo, formulario, validación o permiso se elimina ni se
+   renombra aquí — este archivo es 100% visual (colores, tipografía, bordes,
+   sombras, animaciones de entrada). Toda la lógica sigue en app.js/auth.js/
+   reports.js exactamente igual.
+
+   Colores de marca (SST Asesorías y Consultorías):
+     --b-navy   : #0B2D5B  (Azul Profundo — color principal / headers / texto fuerte)
+     --b-mag    : #E91E63  (Magenta — acentos, degradados)
+     --b-pur    : #7B2CBF  (Morado — acentos, degradados)
+     --b-lila   : #A855F7  (Lila — acentos suaves)
+     --b-rose   : #F9D7E7  (Rosa Claro — fondos suaves, resaltados)
+
+   Colores que NO se tocan (reservados — información/advertencia, igual que
+   antes de este cambio): verde = completado/éxito, ámbar = en proceso/
+   advertencia, rojo = pendiente/peligro. Siguen siendo los mismos de
+   app.css (--green, --amber, --red) en los badges, bolsas de horas,
+   validaciones del calendario y cajas de advertencia.
+   ============================================================================ */
+
+:root{
+  --b-navy:#0B2D5B;
+  --b-navy2:#123a73;
+  --b-mag:#E91E63;
+  --b-pur:#7B2CBF;
+  --b-lila:#A855F7;
+  --b-rose:#F9D7E7;
+  --b-grad: linear-gradient(120deg,var(--b-mag),var(--b-pur));
+  --b-grad2: linear-gradient(135deg,var(--b-navy),var(--b-pur));
+  --b-shadow: 0 10px 30px rgba(11,45,91,.10);
+}
+
+/* ---------------------------------------------------------------------------
+   0) TIPOGRAFÍA — Montserrat (títulos / marca) + Poppins (texto). Requiere
+   el <link> de Google Fonts agregado en el <head> de index.html junto a
+   este archivo.
+   --------------------------------------------------------------------------- */
+*{font-family:'Poppins','Inter',Segoe UI,Arial,sans-serif}
+h1,h2,h3,
+.brand,.topbar h1,.top h1,#pageTitle,
+.loginCard h1,.welcomeHi,.userGreeting,
+.kpi b,.metric .value,.radialPct,
+.panelhead h2,.reportTitle,.reportBrandText h2,
+.calendarHero h2,.wizardTitle,#wizardTitle,
+.invoiceTitle,.invoiceNumber,.sidebarTipTitle,.miniCalHead{
+  font-family:'Montserrat','Inter',Segoe UI,Arial,sans-serif!important;
+  letter-spacing:.2px;
+}
+
+/* ---------------------------------------------------------------------------
+   1) SIDEBAR + NAVEGACIÓN
+   --------------------------------------------------------------------------- */
+.sidebar{border-right:1px solid #ecd9ea!important;box-shadow:2px 0 22px rgba(11,45,91,.07)!important}
+.sidebarBlurb{background:var(--b-rose)!important;border:1px solid #f1c3dd!important;color:#7a3a5e!important}
+.nav a:hover{background:#faf1f7!important}
+.nav a.active{background:linear-gradient(90deg,var(--b-rose),#f3e4fb)!important;color:var(--b-navy)!important;font-weight:800}
+.nav a.active .navIcon{background:#fff!important}
+.sidebarTip{background:var(--b-grad2)!important}
+.miniCalDay.today{background:var(--b-pur)!important}
+.miniCalDay.hasEvent::after{background:var(--b-mag)!important}
+.miniCalDay.today.hasEvent::after{background:#fff!important}
+.miniCalNav{background:var(--b-rose)!important;color:var(--b-navy)!important}
+
+/* Iconos de categoría del menú lateral y de las actividades: antes usaban
+   colores sueltos (azul, verde, naranja, teal, rojo) sin relación con la
+   marca; ahora son todos tintes de los 5 colores de marca. */
+.iconBlue{background:#e6ecf7!important}
+.iconPurple{background:#f1e6fb!important}
+.iconGreen{background:#f7e9f3!important}
+.iconOrange{background:#fdeaf1!important}
+.iconTeal{background:#efe3f8!important}
+.iconRed{background:#fbe3ee!important}
+.navIcon,.activityIcon,.metricIcon{color:var(--b-navy)}
+
+/* ---------------------------------------------------------------------------
+   2) TOPBAR / ENCABEZADO DE USUARIO
+   --------------------------------------------------------------------------- */
+.userTop{background:linear-gradient(90deg,#fff 0%,#fdf6fa 100%)!important}
+.userAvatar{background:var(--b-grad2)!important;box-shadow:0 6px 16px rgba(123,44,191,.22)!important}
+.avatarDot{background:#2fb872!important} /* indicador de "en línea" — se conserva en verde, es un estado, no decoración */
+.userGreeting,.userName{color:var(--b-navy)!important}
+.userLoginBadge{background:#f3e9f6!important;color:var(--b-pur)!important}
+.notifCount{background:var(--b-mag)!important}
+.notifTitle{color:var(--b-navy)!important}
+#visualStatusStrip{background:var(--b-grad2)!important}
+.welcomeCard{background:linear-gradient(135deg,#fff,#fdf3f8)!important;box-shadow:var(--b-shadow)!important}
+
+/* ---------------------------------------------------------------------------
+   3) BOTONES — el verde de "éxito" y el rojo de "peligro" se conservan
+   (son los mismos colores informativos de siempre); solo el botón
+   principal pasa a usar el degradado de marca.
+   --------------------------------------------------------------------------- */
+button.primary,.primary{background:var(--b-grad2)!important;box-shadow:0 8px 18px rgba(11,45,91,.22)!important}
+button.secondary,.secondary{background:#f7eef5!important;border:1px solid #ecd9ea!important;color:var(--b-navy)!important}
+.tabs button.active{background:var(--b-grad2)!important}
+.calToggleActive{background:var(--b-navy)!important}
+.wizardStep.active{background:var(--b-navy)!important;border-color:var(--b-navy)!important}
+
+/* Accesos rápidos del sidebar/dashboard (quickActions): antes azul/teal/
+   verde/naranja sueltos; ahora tintes de marca. */
+.quickAction.qaBlue{background:#eee3f7!important;color:var(--b-navy)!important}
+.quickAction.qaTeal{background:#f3e7fb!important;color:var(--b-pur)!important}
+.quickAction.qaGreen{background:#fdeaf1!important;color:#a3195e!important}
+.quickAction.qaOrange{background:var(--b-rose)!important;color:#9b2f61!important}
+
+/* ---------------------------------------------------------------------------
+   4) TARJETAS KPI / DASHBOARD — franja decorativa y % circular de avance
+   pasan al degradado de marca; los badges de estado (verde/ámbar/rojo)
+   siguen exactamente igual, son información, no decoración.
+   --------------------------------------------------------------------------- */
+.kpi:before{background:var(--b-grad)!important}
+.kpi b{color:var(--b-navy)!important}
+.topbar h1,.top h1{color:var(--b-navy)!important}
+.panelhead{border-bottom:1px solid #f3e7ef!important}
+.radialBar{stroke:var(--b-pur)!important}
+.radialPct{color:var(--b-navy)!important}
+.fill{background:var(--b-grad)!important}
+.reportProgressMini .fill{background:var(--b-grad)!important}
+.section.active .kpi,.section.active .metric{animation:v21FadeUp .4s ease both}
+.kpirow .kpi:nth-child(2),.grid4 .metric:nth-child(2){animation-delay:.04s}
+.kpirow .kpi:nth-child(3),.grid4 .metric:nth-child(3){animation-delay:.08s}
+.kpirow .kpi:nth-child(4),.grid4 .metric:nth-child(4){animation-delay:.12s}
+@keyframes v21FadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@media (prefers-reduced-motion: reduce){
+  .section.active .kpi,.section.active .metric{animation:none}
+}
+
+/* ---------------------------------------------------------------------------
+   5) ACTIVIDADES / BARRAS DE PROGRESO (la barra en sí usa el degradado de
+   marca; los badges done/progress/pending NO se tocan — son el mismo
+   semáforo verde/ámbar/rojo de siempre).
+   --------------------------------------------------------------------------- */
+.activityTop h3{color:var(--b-navy)!important}
+.progressRow .pct{color:var(--b-pur)!important}
+
+/* ---------------------------------------------------------------------------
+   6) LOGIN
+   --------------------------------------------------------------------------- */
+.loginOverlay{
+  background:
+   radial-gradient(circle at 12% 12%,rgba(233,30,99,.12),transparent 30%),
+   radial-gradient(circle at 88% 85%,rgba(123,44,191,.14),transparent 32%),
+   linear-gradient(135deg,#fbf3f8,#f6f2fb)!important
+}
+.loginCard{box-shadow:0 28px 80px rgba(11,45,91,.16)!important}
+.loginCard h1{color:var(--b-navy)!important}
+.loginHint{color:#8a7490!important}
+
+/* ---------------------------------------------------------------------------
+   7) TABLAS
+   --------------------------------------------------------------------------- */
+thead{background:#f7eef6!important}
+tbody tr:hover{background:#fdf7fb!important}
+.link{color:var(--b-pur)!important}
+
+/* ---------------------------------------------------------------------------
+   8) MODALES
+   --------------------------------------------------------------------------- */
+.modalbox h2{color:var(--b-navy)}
+.modalbox::before{background:#e9d7e4!important}
+
+/* ---------------------------------------------------------------------------
+   9) CALENDARIO
+   --------------------------------------------------------------------------- */
+.calendarHero{background:var(--b-grad2)!important;box-shadow:0 16px 36px rgba(11,45,91,.18)!important}
+.dayEvent{border-left:5px solid var(--b-pur)!important}
+.dayEvent .time{color:var(--b-navy)!important}
+#fullCalendarEl .fc-toolbar-title{color:var(--b-navy)!important}
+#fullCalendarEl .fc-button-primary{background:var(--b-navy)!important;border-color:var(--b-navy)!important}
+
+/* ---------------------------------------------------------------------------
+   10) WIZARD (Empresa → Sede → Actividades) Y TOUR GUIADO
+   --------------------------------------------------------------------------- */
+.wizardPane label{color:var(--b-navy)!important}
+.tourTooltip h3{color:var(--b-navy)!important}
+.tourSpotlight{border-color:#fff!important}
+
+/* ---------------------------------------------------------------------------
+   11) INFORMES — ya traían su propia actualización de marca (V19/V20 en
+   app.css); aquí solo se homogenizan un par de títulos y franjas de color
+   de las tarjetas KPI de los informes.
+   --------------------------------------------------------------------------- */
+.reportBrandText h2{color:var(--b-navy)!important}
+.reportSectionTitle{color:var(--b-navy)!important}
+.reportKpiCard.c-blue:after{background:var(--b-navy)!important}
+.reportKpiCard.c-purple:after{background:var(--b-pur)!important}
+.reportStatRow .rs-value{color:var(--b-navy)!important}
+
+/* ---------------------------------------------------------------------------
+   12) PANTALLA "APARIENCIA" (punto de restauración) — estilos del nuevo
+   panel dentro de Configuración.
+   --------------------------------------------------------------------------- */
+#legacyThemeBox{background:#f7eef5!important;border:1px solid #ecd9ea}
+#legacyThemeStatus strong{color:var(--b-navy)}
