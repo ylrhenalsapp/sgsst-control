@@ -48,6 +48,32 @@
 
 <link rel="stylesheet" href="assets/css/app.css">
 
+<!--
+  V21 — Rebranding global (SST Asesorías y Consultorías).
+  Esta hoja de estilos es NUEVA y SEPARADA de app.css: solo agrega
+  presentación visual (colores, tipografía, animaciones), no toca nada
+  funcional. Por eso se puede "apagar" sola, como punto de restauración,
+  desde Configuración → Apariencia (ver toggleLegacyTheme() en app.js).
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="assets/img/favicon.png">
+<link rel="stylesheet" href="assets/css/rebrand.css" id="rebrandStylesheet">
+<script>
+/* Punto de restauración: si el usuario ya eligió volver al diseño
+   anterior, se desactiva la hoja de estilos del rebranding ANTES de
+   pintar la página, para que no se vea "parpadear" el diseño nuevo. */
+(function () {
+  try {
+    if (localStorage.getItem('sgsst_legacy_theme') === '1') {
+      var l = document.getElementById('rebrandStylesheet');
+      if (l) l.disabled = true;
+    }
+  } catch (e) {}
+})();
+</script>
+
 </head>
 <body>
 
@@ -235,12 +261,22 @@
  <button onclick="showConfig('providers',this)">Proveedores</button>
  <button onclick="showConfig('mydata',this)">Mis datos</button>
  <button onclick="showConfig('migration',this)">Migración de datos</button>
+ <button onclick="showConfig('apariencia',this)">Apariencia</button>
 </div>
 <div id="cfg-companies" class="panel"></div><div id="cfg-sites" class="panel" style="display:none"></div><div id="cfg-rates" class="panel" style="display:none"></div><div id="cfg-tasks" class="panel" style="display:none"></div><div id="cfg-providers" class="panel" style="display:none"></div><div id="cfg-mydata" class="panel" style="display:none"></div>
 <div id="cfg-migration" class="panel" style="display:none">
   <div class="panelhead"><h2>Migración de datos del navegador anterior</h2></div>
   <p class="small">Si esta plataforma reemplaza a la versión anterior (que guardaba todo en este navegador), pulsa el botón para copiar esos datos a la base de datos. Hazlo una sola vez, desde el mismo computador donde usabas la versión anterior.</p>
   <button class="primary" data-requires-write onclick="runLegacyMigration()">↻ Migrar datos del navegador anterior</button>
+</div>
+<div id="cfg-apariencia" class="panel" style="display:none">
+  <div class="panelhead"><h2>Apariencia — nueva imagen de marca</h2></div>
+  <p class="small">Esta plataforma usa la nueva identidad visual de <strong>SST Asesorías y Consultorías</strong> (colores, tipografía y presentación). Esto es solo visual: los mismos botones, formularios, combos y opciones de siempre siguen funcionando exactamente igual.</p>
+  <p class="small">Si después de una actualización algo se ve mal, puedes volver al diseño anterior de inmediato con este interruptor, sin perder ningún dato y sin necesitar ayuda técnica:</p>
+  <div id="legacyThemeBox" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:14px;padding:14px 16px;border-radius:12px">
+    <button id="legacyThemeBtn" class="secondary" style="width:auto" onclick="toggleLegacyTheme()">⟲ Volver al diseño anterior</button>
+    <span id="legacyThemeStatus" class="small">Diseño actual: <strong>Nueva imagen de marca</strong></span>
+  </div>
 </div>
 </section>
 </main></div>
