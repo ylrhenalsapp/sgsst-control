@@ -5,7 +5,8 @@
    Es una hoja de estilos NUEVA y SEPARADA de assets/css/app.css. No modifica
    ni borra ninguna regla existente — solo AGREGA reglas que se cargan después
    y repintan la presentación visual de toda la plataforma (colores,
-   tipografía, sombras, animaciones) con la nueva identidad de marca.
+   tipografía, sombras, animaciones) con la nueva identidad de marca,
+   replicando la muestra "Dashboard SST Completo" aprobada.
 
    Por qué está separada (punto de restauración):
    Como es un archivo aparte, se puede "apagar" con un solo interruptor desde
@@ -17,21 +18,20 @@
    Qué NO cambia:
    Ningún botón, combo, formulario, validación o permiso se elimina ni se
    renombra aquí — este archivo es 100% visual (colores, tipografía, bordes,
-   sombras, animaciones de entrada). Toda la lógica sigue en app.js/auth.js/
-   reports.js exactamente igual.
+   sombras, animaciones de entrada, y algunos reordenamientos de paneles que
+   ya existían). Toda la lógica sigue en app.js/auth.js/reports.js igual.
 
    Colores de marca (SST Asesorías y Consultorías):
      --b-navy   : #0B2D5B  (Azul Profundo — color principal / headers / texto fuerte)
      --b-mag    : #E91E63  (Magenta — acentos, degradados)
-     --b-pur    : #7B2CBF  (Morado — acentos, degradados)
-     --b-lila   : #A855F7  (Lila — acentos suaves)
-     --b-rose   : #F9D7E7  (Rosa Claro — fondos suaves, resaltados)
+     --b-pur    : #7B2CBF  (Morado — acentos, degradados, color "activo" por defecto)
+     --b-lila   : #A855F7  (Lila — acentos suaves, segundo segmento de barras)
+     --b-rose   : #F9D7E7  (Rosa Claro — fondos suaves, chips de íconos)
 
-   Colores que NO se tocan (reservados — información/advertencia, igual que
-   antes de este cambio): verde = completado/éxito, ámbar = en proceso/
-   advertencia, rojo = pendiente/peligro. Siguen siendo los mismos de
-   app.css (--green, --amber, --red) en los badges, bolsas de horas,
-   validaciones del calendario y cajas de advertencia.
+   Colores de estado (información/advertencia — SIGUEN siendo reservados,
+   igual que antes de este cambio, solo se afinó el tono exacto para que
+   combine con la muestra aprobada): verde = completado/éxito, ámbar = en
+   proceso/advertencia, rojo = pendiente/peligro.
    ============================================================================ */
 
 :root{
@@ -42,8 +42,14 @@
   --b-lila:#A855F7;
   --b-rose:#F9D7E7;
   --b-grad: linear-gradient(120deg,var(--b-mag),var(--b-pur));
-  --b-grad2: linear-gradient(135deg,var(--b-navy),var(--b-pur));
+  --b-grad2: linear-gradient(100deg,var(--b-navy),var(--b-pur));
   --b-shadow: 0 10px 30px rgba(11,45,91,.10);
+  --b-shadow-lg: 0 14px 32px rgba(123,44,191,.18);
+  /* Estado — mismo significado de siempre (verde=completado, ámbar=en
+     proceso, rojo=pendiente), tono afinado para combinar con la marca. */
+  --b-ok:#1f9c6b; --b-ok-bg:#e4f7ef;
+  --b-warn:#b4821f; --b-warn-bg:#fdf1dd;
+  --b-danger:#c94a56; --b-danger-bg:#fdeaec;
 }
 
 /* ---------------------------------------------------------------------------
@@ -54,11 +60,12 @@
 *{font-family:'Poppins','Inter',Segoe UI,Arial,sans-serif}
 h1,h2,h3,
 .brand,.topbar h1,.top h1,#pageTitle,
-.loginCard h1,.welcomeHi,.userGreeting,
+.loginCard h1,.welcomeHi,.userGreeting,.userName,
 .kpi b,.metric .value,.radialPct,
 .panelhead h2,.reportTitle,.reportBrandText h2,
 .calendarHero h2,.wizardTitle,#wizardTitle,
-.invoiceTitle,.invoiceNumber,.sidebarTipTitle,.miniCalHead{
+.invoiceTitle,.invoiceNumber,.sidebarTipTitle,.miniCalHead,
+#heroTitle,.donutNum,.agendaItem .d{
   font-family:'Montserrat','Inter',Segoe UI,Arial,sans-serif!important;
   letter-spacing:.2px;
 }
@@ -69,42 +76,72 @@ h1,h2,h3,
 .sidebar{border-right:1px solid #ecd9ea!important;box-shadow:2px 0 22px rgba(11,45,91,.07)!important}
 .sidebarBlurb{background:var(--b-rose)!important;border:1px solid #f1c3dd!important;color:#7a3a5e!important}
 .nav a:hover{background:#faf1f7!important}
-.nav a.active{background:linear-gradient(90deg,var(--b-rose),#f3e4fb)!important;color:var(--b-navy)!important;font-weight:800}
-.nav a.active .navIcon{background:#fff!important}
-.sidebarTip{background:var(--b-grad2)!important}
+.nav a.active{background:linear-gradient(90deg,var(--b-rose),#f3e4fb)!important;color:var(--b-pur)!important;font-weight:800;border-left:3px solid var(--b-pur)}
+.sidebarTip{background:var(--b-navy)!important} /* la muestra usa un color sólido, no degradado, para el pie del sidebar */
 .miniCalDay.today{background:var(--b-pur)!important}
 .miniCalDay.hasEvent::after{background:var(--b-mag)!important}
 .miniCalDay.today.hasEvent::after{background:#fff!important}
 .miniCalNav{background:var(--b-rose)!important;color:var(--b-navy)!important}
 
-/* Iconos de categoría del menú lateral y de las actividades: antes usaban
-   colores sueltos (azul, verde, naranja, teal, rojo) sin relación con la
-   marca; ahora son todos tintes de los 5 colores de marca. */
-.iconBlue{background:#e6ecf7!important}
-.iconPurple{background:#f1e6fb!important}
-.iconGreen{background:#f7e9f3!important}
-.iconOrange{background:#fdeaf1!important}
-.iconTeal{background:#efe3f8!important}
-.iconRed{background:#fbe3ee!important}
-.navIcon,.activityIcon,.metricIcon{color:var(--b-navy)}
+/* Iconos de categoría: en la muestra aprobada TODOS los íconos de menú,
+   accesos rápidos y actividades usan el mismo chip rosa/morado (nada de
+   colores sueltos por categoría) — solo las tarjetas KPI reservan el verde
+   para "Horas ejecutadas" (ver sección 4). */
+.navIcon.iconBlue, .navIcon.iconGreen, .navIcon.iconPurple,
+.navIcon.iconOrange, .navIcon.iconTeal, .navIcon.iconRed{
+  background:var(--b-rose)!important;color:var(--b-pur)!important;
+}
+.nav a.active .navIcon{background:var(--b-pur)!important;color:#fff!important}
+.activityIcon.iconBlue, .activityIcon.iconGreen, .activityIcon.iconPurple,
+.activityIcon.iconOrange, .activityIcon.iconTeal, .activityIcon.iconRed{
+  background:var(--b-rose)!important;color:var(--b-pur)!important;
+}
 
 /* ---------------------------------------------------------------------------
-   2) TOPBAR / ENCABEZADO DE USUARIO
+   2) TOPBAR / ENCABEZADO DE USUARIO + ENCABEZADO SUPERIOR (hero)
+   En la muestra aprobada ambos son tarjetas redondeadas con sombra,
+   separadas del borde — no barras pegadas de borde a borde.
    --------------------------------------------------------------------------- */
-.userTop{background:linear-gradient(90deg,#fff 0%,#fdf6fa 100%)!important}
+.userTop{background:#fff!important}
 .userAvatar{background:var(--b-grad2)!important;box-shadow:0 6px 16px rgba(123,44,191,.22)!important}
 .avatarDot{background:#2fb872!important} /* indicador de "en línea" — se conserva en verde, es un estado, no decoración */
 .userGreeting,.userName{color:var(--b-navy)!important}
-.userLoginBadge{background:#f3e9f6!important;color:var(--b-pur)!important}
+.userLoginBadge{background:var(--b-ok-bg)!important;color:var(--b-ok)!important}
+.notifBell{background:var(--b-rose)!important;color:var(--b-pur)!important}
 .notifCount{background:var(--b-mag)!important}
 .notifTitle{color:var(--b-navy)!important}
-#visualStatusStrip{background:var(--b-grad2)!important}
 .welcomeCard{background:linear-gradient(135deg,#fff,#fdf3f8)!important;box-shadow:var(--b-shadow)!important}
+
+#visualStatusStrip{
+  background:var(--b-grad2)!important;
+  box-shadow:var(--b-shadow-lg)!important;
+}
+#visualStatusStrip,#visualStatusStrip *{color:#fff!important}
+@media (min-width:901px){
+  #userTop{
+    margin:16px 26px 0 calc(255px + 26px)!important;
+    width:calc(100% - 255px - 52px)!important;
+    border-radius:18px!important;
+    box-shadow:var(--b-shadow)!important;
+    border:1px solid #f3e7ef!important;
+  }
+  #visualStatusStrip{
+    margin:14px 26px 0 calc(255px + 26px)!important;
+    width:calc(100% - 255px - 52px)!important;
+    border-radius:18px!important;
+    padding:16px 22px!important;
+  }
+}
+@media (min-width:901px) and (max-width:1180px){
+  /* a este ancho la sidebar mide 220px (V20 de app.css), no 255px */
+  #userTop{margin-left:calc(220px + 26px)!important;width:calc(100% - 220px - 52px)!important}
+  #visualStatusStrip{margin-left:calc(220px + 26px)!important;width:calc(100% - 220px - 52px)!important}
+}
 
 /* ---------------------------------------------------------------------------
    3) BOTONES — el verde de "éxito" y el rojo de "peligro" se conservan
-   (son los mismos colores informativos de siempre); solo el botón
-   principal pasa a usar el degradado de marca.
+   (son los mismos colores informativos de siempre); el botón principal y
+   el de "acción destacada" en accesos rápidos usan la marca.
    --------------------------------------------------------------------------- */
 button.primary,.primary{background:var(--b-grad2)!important;box-shadow:0 8px 18px rgba(11,45,91,.22)!important}
 button.secondary,.secondary{background:#f7eef5!important;border:1px solid #ecd9ea!important;color:var(--b-navy)!important}
@@ -112,42 +149,79 @@ button.secondary,.secondary{background:#f7eef5!important;border:1px solid #ecd9e
 .calToggleActive{background:var(--b-navy)!important}
 .wizardStep.active{background:var(--b-navy)!important;border-color:var(--b-navy)!important}
 
-/* Accesos rápidos del sidebar/dashboard (quickActions): antes azul/teal/
-   verde/naranja sueltos; ahora tintes de marca. */
-.quickAction.qaBlue{background:#eee3f7!important;color:var(--b-navy)!important}
-.quickAction.qaTeal{background:#f3e7fb!important;color:var(--b-pur)!important}
-.quickAction.qaGreen{background:#fdeaf1!important;color:#a3195e!important}
-.quickAction.qaOrange{background:var(--b-rose)!important;color:#9b2f61!important}
+/* Accesos rápidos: en la muestra solo el primero ("Registrar horas") va
+   resaltado en morado sólido; el resto son botones neutros con borde que
+   se iluminan en morado al pasar el mouse. */
+.quickAction,
+.quickAction.qaTeal,.quickAction.qaGreen,.quickAction.qaOrange{
+  background:#f6f5fb!important;border:1px solid #ece6f4!important;color:var(--text)!important;box-shadow:none!important;
+}
+.quickAction:hover{border-color:var(--b-pur)!important;color:var(--b-pur)!important}
+.quickAction .navIcon{background:rgba(123,44,191,.12)!important;color:var(--b-pur)!important}
+.quickAction.qaBlue{background:var(--b-grad2)!important;border-color:transparent!important;color:#fff!important;box-shadow:0 8px 18px rgba(11,45,91,.2)!important}
+.quickAction.qaBlue .navIcon{background:rgba(255,255,255,.25)!important;color:#fff!important}
 
 /* ---------------------------------------------------------------------------
-   4) TARJETAS KPI / DASHBOARD — franja decorativa y % circular de avance
-   pasan al degradado de marca; los badges de estado (verde/ámbar/rojo)
-   siguen exactamente igual, son información, no decoración.
+   4) TARJETAS KPI / DASHBOARD
+   Las 4 tarjetas KPI usan ícono rosa/morado, EXCEPTO "Horas ejecutadas"
+   (iconGreen), que conserva el verde de éxito — igual que la muestra.
    --------------------------------------------------------------------------- */
-.kpi:before{background:var(--b-grad)!important}
-.kpi b{color:var(--b-navy)!important}
+.metricIcon.iconBlue, .metricIcon.iconPurple, .metricIcon.iconOrange,
+.metricIcon.iconTeal, .metricIcon.iconRed{
+  background:var(--b-rose)!important;color:var(--b-pur)!important;
+}
+.metricIcon.iconGreen{background:var(--b-ok-bg)!important;color:var(--b-ok)!important}
+.card.metric{transition:transform .18s ease,box-shadow .18s ease}
+.card.metric:hover{transform:translateY(-3px);box-shadow:var(--b-shadow-lg)!important}
+.metric .value{color:var(--b-navy)!important}
 .topbar h1,.top h1{color:var(--b-navy)!important}
 .panelhead{border-bottom:1px solid #f3e7ef!important}
-.radialBar{stroke:var(--b-pur)!important}
-.radialPct{color:var(--b-navy)!important}
+.panelhead h2{color:var(--b-navy)}
 .fill{background:var(--b-grad)!important}
 .reportProgressMini .fill{background:var(--b-grad)!important}
 .section.active .kpi,.section.active .metric{animation:v21FadeUp .4s ease both}
-.kpirow .kpi:nth-child(2),.grid4 .metric:nth-child(2){animation-delay:.04s}
-.kpirow .kpi:nth-child(3),.grid4 .metric:nth-child(3){animation-delay:.08s}
-.kpirow .kpi:nth-child(4),.grid4 .metric:nth-child(4){animation-delay:.12s}
+.grid4 .metric:nth-child(2){animation-delay:.04s}
+.grid4 .metric:nth-child(3){animation-delay:.08s}
+.grid4 .metric:nth-child(4){animation-delay:.12s}
 @keyframes v21FadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @media (prefers-reduced-motion: reduce){
   .section.active .kpi,.section.active .metric{animation:none}
 }
 
 /* ---------------------------------------------------------------------------
-   5) ACTIVIDADES / BARRAS DE PROGRESO (la barra en sí usa el degradado de
-   marca; los badges done/progress/pending NO se tocan — son el mismo
-   semáforo verde/ámbar/rojo de siempre).
+   4b) "Avance del mes" — dona + barra segmentada + leyenda, junto a la
+   tendencia de horas, en una fila de dos columnas (como en la muestra).
+   --------------------------------------------------------------------------- */
+.topGrid{display:grid;grid-template-columns:300px 1fr;gap:16px}
+@media (max-width:1080px){.topGrid{grid-template-columns:1fr}}
+.monthProgressWrap{display:flex!important;flex-direction:column;align-items:center;gap:4px;text-align:center}
+.donutBox{position:relative;width:130px;height:130px;margin:4px auto 2px}
+.donutBox .radialProgress{width:130px;height:130px;display:block}
+.donutBox .radialPct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:var(--b-navy)}
+.radialBar{stroke:var(--b-pur)!important}
+.radialSub{color:var(--muted);font-size:12px;margin-top:2px}
+.segBar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:#f0ebf7;margin-top:14px;width:100%;max-width:220px}
+.segBar span{display:block;height:100%;transition:width .8s ease}
+.segBar .segA{background:var(--b-pur)}
+.segBar .segB{background:var(--b-lila)}
+.segLegend{display:flex;justify-content:space-between;width:100%;max-width:220px;margin-top:8px;font-size:10.5px;color:var(--muted);font-weight:600}
+
+/* ---------------------------------------------------------------------------
+   5) ACTIVIDADES / BARRAS DE PROGRESO — el color de la barra de cada
+   actividad ahora sigue su estado real (igual criterio que su badge:
+   verde=completada, ámbar=en proceso, rojo=pendiente) en vez del
+   degradado de marca genérico.
    --------------------------------------------------------------------------- */
 .activityTop h3{color:var(--b-navy)!important}
 .progressRow .pct{color:var(--b-pur)!important}
+.fill.fillOk{background:var(--b-ok)!important}
+.fill.fillWarn{background:var(--b-warn)!important}
+.fill.fillPending{background:var(--b-danger)!important}
+.badge.done{background:var(--b-ok-bg)!important;color:var(--b-ok)!important}
+.badge.progress{background:var(--b-warn-bg)!important;color:var(--b-warn)!important}
+.badge.pending{background:var(--b-danger-bg)!important;color:var(--b-danger)!important}
+.conflictOk{background:var(--b-ok-bg)!important;color:var(--b-ok)!important}
+.conflictBad{background:var(--b-danger-bg)!important;color:var(--b-danger)!important}
 
 /* ---------------------------------------------------------------------------
    6) LOGIN
@@ -208,3 +282,24 @@ tbody tr:hover{background:#fdf7fb!important}
    --------------------------------------------------------------------------- */
 #legacyThemeBox{background:#f7eef5!important;border:1px solid #ecd9ea}
 #legacyThemeStatus strong{color:var(--b-navy)}
+
+/* ---------------------------------------------------------------------------
+   13) DASHBOARD — tendencia de horas (10 días) y próximas citas. Son
+   paneles aditivos (no reemplazan nada existente), construidos con los
+   mismos datos que ya se cargaban para el Dashboard. Estilo igual al de
+   la muestra aprobada ("Dashboard SST Completo").
+   --------------------------------------------------------------------------- */
+.trendChart{display:flex;align-items:stretch;gap:8px;height:150px;padding-top:10px}
+.trendChart .trendBar{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0}
+.trendChart .trendCol{width:100%;flex:1;border-radius:6px 6px 2px 2px;background:#f0ebf7;position:relative;overflow:hidden}
+.trendChart .trendCol span{position:absolute;bottom:0;left:0;right:0;height:0;border-radius:6px 6px 2px 2px;background:var(--b-grad);animation:v21GrowH .8s ease forwards}
+.trendChart .trendDay{font-size:10px;color:var(--muted);font-weight:600}
+@keyframes v21GrowH{to{height:var(--h)}}
+@media (prefers-reduced-motion: reduce){.trendChart .trendCol span{animation:none;height:var(--h)}}
+@media (max-width:640px){.trendChart{height:120px;gap:5px}}
+
+.agendaItem{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid #f3e7ef;font-size:11.5px}
+.agendaItem:last-child{border-bottom:none}
+.agendaItem .d{font-weight:800;color:var(--b-pur);min-width:28px;font-size:15px}
+.agendaItem .t{display:block;color:var(--text);font-weight:600}
+.agendaItem .s{color:var(--muted);display:block;font-size:10.5px;margin-top:1px}
