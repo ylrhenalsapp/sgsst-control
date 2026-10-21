@@ -1423,10 +1423,39 @@ async function deleteItem(table, id) {
 // Configuración: empresas, sedes, tarifas, actividades
 // ---------------------------------------------------------------------------
 function showConfig(tab, btn) {
-  ['companies', 'sites', 'rates', 'tasks', 'providers', 'mydata', 'migration'].forEach(x => $('cfg-' + x).style.display = x === tab ? 'block' : 'none');
+  ['companies', 'sites', 'rates', 'tasks', 'providers', 'mydata', 'migration', 'apariencia'].forEach(x => $('cfg-' + x).style.display = x === tab ? 'block' : 'none');
   document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 }
+
+// ---------------------------------------------------------------------------
+// V21 — Punto de restauración del rebranding visual (Configuración →
+// Apariencia). Esto NO toca ninguna función existente de arriba: solo
+// agrega el interruptor para apagar/encender la hoja de estilos nueva
+// (assets/css/rebrand.css). Ver también el script en el <head> de
+// index.html que aplica esta misma preferencia antes de pintar la página.
+// ---------------------------------------------------------------------------
+function toggleLegacyTheme() {
+  var isLegacy = false;
+  try { isLegacy = localStorage.getItem('sgsst_legacy_theme') === '1'; } catch (e) {}
+  try { localStorage.setItem('sgsst_legacy_theme', isLegacy ? '0' : '1'); } catch (e) {}
+  location.reload();
+}
+
+(function initLegacyThemeStatus() {
+  var statusEl = document.getElementById('legacyThemeStatus');
+  var btnEl = document.getElementById('legacyThemeBtn');
+  if (!statusEl || !btnEl) return;
+  var isLegacy = false;
+  try { isLegacy = localStorage.getItem('sgsst_legacy_theme') === '1'; } catch (e) {}
+  if (isLegacy) {
+    statusEl.innerHTML = 'Diseño actual: <strong>Diseño anterior (restaurado)</strong>';
+    btnEl.textContent = '✨ Activar nueva imagen de marca';
+  } else {
+    statusEl.innerHTML = 'Diseño actual: <strong>Nueva imagen de marca</strong>';
+    btnEl.textContent = '⟲ Volver al diseño anterior';
+  }
+})();
 
 async function renderConfig() {
   const m = selectedMonth();
