@@ -14,7 +14,7 @@
   (celular, otra sesión abierta, etc.) se queda pegado en una versión vieja
   esperando que alguien limpie el caché a mano.
 -->
-<meta name="build-version" content="2026-09-28T17:23:28Z">
+<meta name="build-version" content="2026-10-21T00:32:45Z">
 <script>
 (function () {
   var CURRENT = document.querySelector('meta[name="build-version"]')?.content || '';
@@ -115,10 +115,22 @@
   </div>
 </div>
 
-<div id="visualStatusStrip" style="display:none;padding:10px 18px;background:linear-gradient(90deg,#18324a,#285878);color:#fff">
-  <div style="max-width:1600px;margin:auto;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap">
-    <div style="font-weight:800">📊 Control inteligente de actividades, horas y evidencias</div>
-    <div style="font-size:13px;opacity:.9">Gestión operativa SG-SST en tiempo real</div>
+<!-- V21: antes era un texto fijo de marketing; ahora es dinámico (mes +
+     empresa + sede seleccionados) con un aro que refleja el mismo % de
+     avance de horas del mes que ya se calculaba — sin ninguna consulta
+     nueva a la base de datos. Si por algún motivo el texto no se actualiza
+     (JS viejo en caché, por ejemplo) queda el mensaje genérico de siempre
+     como respaldo. -->
+<div id="visualStatusStrip" style="display:none">
+  <div style="display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+    <div>
+      <div id="heroTitle" style="font-weight:800">📊 Control inteligente de actividades, horas y evidencias</div>
+      <div id="heroSub" style="font-size:13px;opacity:.9;margin-top:2px">Gestión operativa SG-SST en tiempo real</div>
+    </div>
+    <svg id="heroRing" viewBox="0 0 54 54" style="width:46px;height:46px;flex:0 0 auto">
+      <circle cx="27" cy="27" r="22" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="6"></circle>
+      <circle id="heroRingBar" cx="27" cy="27" r="22" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-dasharray="138.2" stroke-dashoffset="138.2" transform="rotate(-90 27 27)"></circle>
+    </svg>
   </div>
 </div>
 
@@ -158,24 +170,36 @@
 <div id="bagAlertBanner" class="conflictBox conflictBad" style="display:none;margin-bottom:16px"></div>
 
 <section id="dashboard" class="section active">
-<div class="panel monthProgressPanel" id="monthProgressPanel" style="margin-bottom:16px">
-  <div class="monthProgressWrap">
-    <svg class="radialProgress" viewBox="0 0 120 120">
-      <circle class="radialTrack" cx="60" cy="60" r="52"></circle>
-      <circle class="radialBar" id="radialProgressBar" cx="60" cy="60" r="52"></circle>
-    </svg>
-    <div class="radialLabel">
-      <div class="radialPct" id="radialProgressPct">0%</div>
-      <div class="radialSub" id="radialProgressSub">0 h ejecutadas de 0 h asignadas</div>
-      <div class="radialTitle">Avance de horas del mes</div>
-    </div>
-  </div>
-</div>
 <div class="grid4">
   <div class="card metric"><div class="metricIcon iconBlue">⏱️</div><div class="label">Horas asignadas</div><div class="value" id="mAssigned">0</div><div class="sub">Bolsa de horas de la sede</div></div>
   <div class="card metric"><div class="metricIcon iconGreen">✅</div><div class="label">Horas ejecutadas</div><div class="value" id="mUsed">0</div><div class="sub">Según registros del periodo</div></div>
   <div class="card metric"><div class="metricIcon iconPurple">🗓️</div><div class="label">Horas disponibles</div><div class="value" id="mRemaining">0</div><div class="sub">Saldo de la bolsa</div></div>
   <div class="card metric"><div class="metricIcon iconOrange">💲</div><div class="label">Valor ejecutado</div><div class="value" id="mValue">$0</div><div class="sub">Tarifa vigente por hora</div></div>
+</div>
+<!-- V21: "Avance del mes" (ya existía) ahora emparejado con la tendencia de
+     horas de los últimos 10 días (nueva) en una sola fila de dos columnas,
+     igual que en la muestra aprobada. Ninguna consulta nueva: la tendencia
+     usa los mismos hour_records que ya se cargaban para esta sede. -->
+<div class="topGrid" style="margin-top:18px">
+  <div class="panel monthProgressPanel" id="monthProgressPanel">
+    <div class="panelhead"><h2>Avance del mes</h2></div>
+    <div class="monthProgressWrap">
+      <div class="donutBox">
+        <svg class="radialProgress" viewBox="0 0 120 120">
+          <circle class="radialTrack" cx="60" cy="60" r="52"></circle>
+          <circle class="radialBar" id="radialProgressBar" cx="60" cy="60" r="52"></circle>
+        </svg>
+        <div class="radialPct" id="radialProgressPct">0%</div>
+      </div>
+      <div class="radialSub" id="radialProgressSub">0 h ejecutadas de 0 h asignadas</div>
+      <div class="segBar"><span class="segA" id="segBarUsed" style="width:0%"></span><span class="segB" id="segBarFree" style="width:0%"></span></div>
+      <div class="segLegend"><span id="segLegendUsed">● Ejecutado 0%</span><span id="segLegendFree">● Disponible 0%</span></div>
+    </div>
+  </div>
+  <div class="panel" id="hoursTrendPanel">
+    <div class="panelhead"><h2>Tendencia de horas</h2><span class="small">Últimos 10 días · esta sede</span></div>
+    <div id="hoursTrendChart"></div>
+  </div>
 </div>
 <div class="grid2" style="margin-top:18px">
  <div class="panel"><div class="panelhead"><h2>Las 5 actividades del proyecto</h2><button class="primary" data-requires-write onclick="openActivityModal()">+ Registrar avance</button></div><div id="dashboardActivities"></div></div>
@@ -188,6 +212,9 @@
       <button class="quickAction qaOrange" onclick="showSection('informes',document.querySelector('.nav a[href=&quot;#informes&quot;]'));generateReport()"><span class="navIcon iconOrange">📄</span>Generar informe</button>
     </div>
   </div>
+  <!-- V21: próximas citas de la agenda de esta sede (aditivo — usa los
+       mismos schedule_events que ya se cargaban en state.calendarSite). -->
+  <div class="panel"><div class="panelhead"><h2>📅 Próximas citas</h2></div><div id="upcomingAppointmentsList"></div></div>
   <div class="panel"><div class="panelhead"><h2>Calendario</h2><button class="secondary" onclick="showSection('calendario',document.querySelector('.nav a[href=&quot;#calendario&quot;]'));renderCalendar()" style="padding:4px 10px;font-size:12px">Ver completo</button></div><div id="miniCalendar" class="miniCalendar"></div></div>
   <div class="panel"><div class="panelhead"><h2>🕒 Bitácora de actividad</h2></div><div id="activityLogList"></div></div>
  </div>
