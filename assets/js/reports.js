@@ -614,10 +614,14 @@ async function ensureReport() {
     const providerId = $('reportProvider')?.value || '';
     return (lastReport && lastReport.scope === 'provider' && lastReport.providerId === providerId) ? lastReport : await renderProviderReport();
   }
-  if (scope === 'invoice') {
-    const targetValue = $('reportProvider')?.value || '', m = $('reportMonth')?.value || selectedMonth();
-    return (lastReport && lastReport.scope === 'invoice' && lastReport.targetValue === targetValue && lastReport.m === m) ? lastReport : await renderInvoiceReport();
-  }
+  // La Cuenta de cobro NUNCA debe exportarse/enviarse con datos
+  // desactualizados: a diferencia de los demás informes, aquí es muy común
+  // corregir una hora/actividad y, acto seguido, exportar o enviar por
+  // correo sin volver a tocar el selector de proveedor ni de mes — eso
+  // antes reutilizaba el último "lastReport" en memoria aunque las horas ya
+  // hubieran cambiado en la base de datos. Por eso esta rama siempre
+  // regenera, sin revisar caché.
+  if (scope === 'invoice') return await renderInvoiceReport();
   return (lastReport && (lastReport.scope === 'monthly' || lastReport.scope === 'global')) ? lastReport : generateReport();
 }
 
