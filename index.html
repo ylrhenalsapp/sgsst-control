@@ -14,7 +14,7 @@
   (celular, otra sesión abierta, etc.) se queda pegado en una versión vieja
   esperando que alguien limpie el caché a mano.
 -->
-<meta name="build-version" content="2026-10-21T17:12:58Z">
+<meta name="build-version" content="2026-10-26T21:59:32Z">
 <script>
 (function () {
   var CURRENT = document.querySelector('meta[name="build-version"]')?.content || '';
@@ -230,7 +230,7 @@
 </section>
 
 <section id="horas" class="section">
-<div class="panel"><div class="panelhead"><h2>Registro de horas</h2><div><button class="primary" data-requires-write onclick="openHoursModal()">+ Registrar horas</button> <button id="hoursShowCompanyAllBtn" class="secondary" onclick="toggleHoursShowCompanyAll()">🏢 Ver todas las sedes de esta empresa</button> <button id="hoursShowAllBtn" class="secondary" onclick="toggleHoursShowAll()">👁️ Ver todas las empresas</button></div></div><div id="monthCloseBanner"></div><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Empresa / Sede</th><th>Actividad</th><th>Avance</th><th>Estado</th><th>Horas</th><th>Tarifa</th><th>Valor</th><th>Pago</th><th>Acción</th></tr></thead><tbody id="hoursTable"></tbody></table></div></div>
+<div class="panel"><div class="panelhead"><h2>Registro de horas</h2><div><button class="primary" data-requires-write onclick="openHoursModal()">+ Registrar horas</button> <button id="hoursShowCompanyAllBtn" class="secondary" onclick="toggleHoursShowCompanyAll()">🏢 Ver todas las sedes de esta empresa</button> <button id="hoursShowAllBtn" class="secondary" onclick="toggleHoursShowAll()">👁️ Ver todas las empresas</button></div></div><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Empresa / Sede</th><th>Actividad</th><th>Avance</th><th>Estado</th><th>Horas</th><th>Tarifa</th><th>Valor</th><th>Pago</th><th>Acción</th></tr></thead><tbody id="hoursTable"></tbody></table></div></div>
 </section>
 
 <section id="evidencias" class="section">
@@ -273,9 +273,7 @@
 <div class="panel">
 <div class="panelhead"><h2>Generador de informes</h2><div><button class="success" onclick="generateReport()">↻ Actualizar</button> <button class="secondary" onclick="exportReportPDF()">📕 Exportar PDF</button> <button class="secondary" onclick="exportReportWord()">📘 Exportar Word</button> <button class="primary" onclick="prepareEmail()">📩 Preparar correo</button></div></div>
 <div class="formgrid" style="margin-bottom:16px"><div><label>Tipo de informe</label><select id="reportScope" onchange="generateReport()"><option value="monthly">Informe mensual</option><option value="global">Informe histórico de la sede</option><option value="all">Informe general · todas las empresas</option><option value="provider">Informe por proveedor</option><option value="invoice">Cuenta de cobro</option></select></div><div><label>Periodo de referencia</label><input id="reportMonth" type="month"></div></div>
-<div id="reportProviderWrap" style="display:none;margin-bottom:16px"><label>Proveedor</label><select id="reportProvider" onchange="generateReport()"></select></div>
-<div id="reportBillingPeriodWrap" style="display:none;margin-bottom:16px"><label>Periodo cerrado</label><select id="reportBillingPeriod" onchange="renderInvoiceReport()"></select></div>
-<div id="reportBox" class="report">Selecciona empresa, sede y periodo y genera el informe.</div>
+<div id="reportProviderWrap" style="display:none;margin-bottom:16px"><label>Proveedor</label><select id="reportProvider" onchange="generateReport()"></select></div><div id="reportBox" class="report">Selecciona empresa, sede y periodo y genera el informe.</div>
 </div>
 </section>
 
@@ -425,21 +423,6 @@
 <div class="actions"><button class="secondary" onclick="closeModal('addHoursModal')">Cancelar</button><button class="success" onclick="saveAdditionalHours()">+ Agregar horas</button></div>
 </div></div>
 
-<div class="modal" id="billingCloseModal"><div class="modalbox" style="width:min(820px,96%)">
-<h2>Cerrar horas</h2>
-<p class="small">Cierra un periodo de horas para un proveedor (o una empresa sin proveedor, que cuenta como su propio proveedor de una sola empresa). Las actividades <b>Completada</b> se incluyen siempre; las <b>En proceso</b> quedan a tu elección con el check de abajo — lo que no marques se queda disponible, sin bloquear nada, para el próximo cierre.</p>
-<div class="formgrid">
-<div class="full"><label>Proveedor / Empresa</label><select id="bcTarget"></select></div>
-<div><label>Desde</label><input id="bcDateFrom" type="date"></div>
-<div><label>Hasta</label><input id="bcDateTo" type="date"></div>
-</div>
-<div class="reportSectionTitle" style="margin-top:14px">Actividades con horas en este rango</div>
-<div id="bcCurrentList"><p class="empty">Selecciona proveedor y fechas.</p></div>
-<div class="reportSectionTitle" style="margin-top:18px">Pendientes de periodos anteriores (sin facturar todavía)</div>
-<div id="bcPendingList"><p class="empty">—</p></div>
-<p class="small" id="bcSummary" style="margin-top:12px">Todavía no hay ningún registro para incluir en este cierre.</p>
-<div class="actions"><button class="secondary" onclick="closeModal('billingCloseModal')">Cancelar</button><button class="primary" data-requires-write onclick="confirmBillingClose()">Cerrar y facturar</button></div>
-</div></div>
 
 <div class="modal" id="scheduleModal"><div class="modalbox">
 <h2>🗓️ Programar actividad</h2>
